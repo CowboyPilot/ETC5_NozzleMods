@@ -33,12 +33,11 @@ WINLINK_INI="${WINEPREFIX}/drive_c/RMS Express/RMS Express.ini"
 VARAC_INI="${WINEPREFIX}/drive_c/VarAC/VarAC.ini"
 
 # Colors
-ESC="\x1B"
-RED="${ESC}[1;31m"
-GREEN="${ESC}[1;32m"
-YELLOW="${ESC}[1;33m"
-BLUE="${ESC}[1;34m"
-NC="${ESC}[0m"
+RED='\033[1;31m'
+GREEN='\033[1;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[1;34m'
+NC='\033[0m'
 
 # Wine command
 WINE_BIN="$(command -v wine-stable 2>/dev/null || command -v wine 2>/dev/null || echo wine)"
