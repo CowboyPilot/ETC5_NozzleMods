@@ -1,0 +1,37 @@
+# Author   : [Your Name]
+# Date     : November 30, 2025
+# Purpose  : udev rules for the Yaesu FT-710 via native USB
+#
+# Preconditions:
+# 1. Yaesu FT-710 is selected via et-radio
+# 2. Yaesu FT-710 is powered on and connected via USB cable
+#
+# Postconditions:
+# 1. /dev/et-cat created
+# 2. /dev/et-audio created
+# 3. rigctld is started
+# 
+# CAUTION: The FT-710 is an experimental device that may impact the stability of the platform and may
+#          not work 100% of the time. This device support is best effort only.
+
+# Special rule to ensure that the first serial interface is tagged as ET_DEVICE=FT-710 so
+# that it can be used in the next CAT control rule. The second serial device will not work
+# if it is incorrectly detected as the /dev/et-cat device.
+KERNEL=="ttyUSB[0-9]*", SUBSYSTEM=="tty", PROGRAM="/opt/emcomm-tools/sbin/udev-tester.sh yaesu-ft710", \
+    ATTRS{bInterfaceNumber}=="00", \
+    ENV{ET_DEVICE}="FT-710"
+
+# CAT control device will only match if PROGRAM above matches (exit status=0)
+SUBSYSTEM=="tty", ENV{ET_DEVICE}=="FT-710", \
+    ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea70",\
+    ACTION=="add", \
+    ENV{ET_SUBDEVICE}="CAT", GROUP="dialout", MODE="0660", SYMLINK+="et-cat", \
+    RUN+="/usr/bin/systemctl start rigctld"
+
+# Audio device will only match if PROGRAM above matches (exit status=0)
+SUBSYSTEM=="sound", ATTRS{idVendor}=="0d8c", ATTRS{idProduct}=="0013", \
+    PROGRAM="/opt/emcomm-tools/sbin/udev-tester.sh yaesu-ft710", \
+    ACTION=="add", \
+    ENV{ET_DEVICE}="FT-710", \
+    ATTR{id}="ET_AUDIO", \
+    ENV{ET_SUBDEVICE}="AUDIO", GROUP="audio", MODE="0660", SYMLINK+="et-audio"

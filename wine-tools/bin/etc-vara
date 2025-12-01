@@ -1,0 +1,807 @@
+#!/bin/bash
+################################################################################
+# etc-vara-launcher
+#
+# Launcher for VARA modems + applications with dynamic port allocation
+#
+# Features:
+#   - Cleans up all Wine/ET processes before starting
+#   - Scans ports 8300-8350 for free port (no LISTEN/ESTABLISHED/TIME_WAIT)
+#   - Patches INI files with selected port
+#   - Launches selected modem + application combination
+#
+# Options:
+#   - VarAC + VARA HF
+#   - VarAC + VARA FM
+#   - Winlink + VARA HF
+#   - Winlink + VARA FM
+#   - Winlink Other (ARDOP/Telnet/etc - no VARA)
+#   - VARA HF Modem Only
+#   - VARA FM Modem Only
+################################################################################
+
+set -euo pipefail
+
+# Paths
+ET_HOME="/opt/emcomm-tools"
+ET_BIN="${ET_HOME}/bin"
+ET_CONFIG="${ET_HOME}/.config"
+ET_CONF_TEMPLATE_DIR="${ET_HOME}/conf/template.d/winlink"
+WINEPREFIX="${HOME}/.wine32"
+
+# Config files
+PAT_CONFIG="${HOME}/.config/pat/config.json"
+ET_USER_CONFIG="${HOME}/.config/emcomm-tools/user.json"
+ET_RADIO_CONFIG="${HOME}/.config/emcomm-tools/active-radio.json"
+
+# Wine executables
+WINLINK_EXE="${WINEPREFIX}/drive_c/RMS Express/RMS Express.exe"
+VARAC_EXE="${WINEPREFIX}/drive_c/VarAC/VarAC.exe"
+VARA_HF_EXE="${WINEPREFIX}/drive_c/VARA/VARA.exe"
+VARA_FM_EXE="${WINEPREFIX}/drive_c/VARA FM/VARAFM.exe"
+
+# INI files
+VARA_HF_INI="${WINEPREFIX}/drive_c/VARA/VARA.ini"
+VARA_FM_INI="${WINEPREFIX}/drive_c/VARA FM/VARAFM.ini"
+WINLINK_INI="${WINEPREFIX}/drive_c/RMS Express/RMS Express.ini"
+VARAC_INI="${WINEPREFIX}/drive_c/VarAC/VarAC.ini"
+
+# Colors
+ESC="\x1B"
+RED="${ESC}[1;31m"
+GREEN="${ESC}[1;32m"
+YELLOW="${ESC}[1;33m"
+BLUE="${ESC}[1;34m"
+NC="${ESC}[0m"
+
+# Wine command
+WINE_BIN="$(command -v wine-stable 2>/dev/null || command -v wine 2>/dev/null || echo wine)"
+
+################################################################################
+# Sanity Checks
+################################################################################
+
+if [[ "${EUID}" -eq 0 ]]; then
+  echo -e "${RED}ERROR: Do NOT run this script as root.${NC}"
+  exit 1
+fi
+
+################################################################################
+# Helper Functions
+################################################################################
+
+# Find first free port in 8300-8350 (no TCP state at all)
+find_free_port() {
+  local port
+  for port in $(seq 8300 8350); do
+    # Check if port has ANY TCP state (LISTEN, ESTABLISHED, TIME_WAIT, etc)
+    if ! ss -tan 2>/dev/null | grep -q ":${port} "; then
+      echo "${port}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Global cleanup: kill ET processes + Wine + VARA
+global_cleanup() {
+  echo
+  echo -e "${YELLOW}=============================================================${NC}"
+  echo -e "${YELLOW}  Cleaning up: killing ET / Wine / VARA processes${NC}"
+  echo -e "${YELLOW}=============================================================${NC}"
+
+  # Kill ET processes
+  if [[ -x "${ET_BIN}/et-kill-all" ]]; then
+    "${ET_BIN}/et-kill-all" 2>/dev/null || true
+  fi
+
+  # Kill Wine for this prefix
+  WINEPREFIX="${WINEPREFIX}" wineserver -k 2>/dev/null || true
+
+  # Kill any leftover VARA processes
+  pkill -u "$USER" -f "VARA.exe" 2>/dev/null || true
+  pkill -u "$USER" -f "VARAFM.exe" 2>/dev/null || true
+  pkill -u "$USER" -f "VarAC.exe" 2>/dev/null || true
+  pkill -u "$USER" -f "RMS Express.exe" 2>/dev/null || true
+  pkill -f "pat http" 2>/dev/null || true
+
+  sleep 2
+  echo -e "${GREEN}Cleanup complete${NC}"
+}
+
+# Get primary IP address
+get_primary_ip() {
+  local ip
+  ip=$(hostname -I 2>/dev/null | awk 'NF{print $1;exit}') || ip=""
+  if [[ -z "${ip}" ]]; then
+    ip=$(ip -4 addr show scope global 2>/dev/null | awk "/inet /{print \$2}" | cut -d/ -f1 | head -n1) || ip=""
+  fi
+  echo "${ip:-127.0.0.1}"
+}
+
+################################################################################
+# Pat Configuration Functions
+################################################################################
+
+# Get ET environment variables
+get_et_vars() {
+  local CALLSIGN=""
+  local GRID=""
+  local WINLINK_PASSWD=""
+  
+  if [ -f "${ET_USER_CONFIG}" ]; then
+    CALLSIGN=$(jq -r .callsign "${ET_USER_CONFIG}" 2>/dev/null || echo "")
+    GRID=$(jq -r .grid "${ET_USER_CONFIG}" 2>/dev/null || echo "")
+    WINLINK_PASSWD=$(jq -r .winlinkPasswd "${ET_USER_CONFIG}" 2>/dev/null || echo "")
+  fi
+  
+  echo "${CALLSIGN}|${GRID}|${WINLINK_PASSWD}"
+}
+
+# Get radio configuration from active-radio.json
+get_radio_config() {
+  local BAUD_RATE="38400"  # Default
+  local RADIO_MODEL=""
+  
+  if [ -f "${ET_RADIO_CONFIG}" ]; then
+    BAUD_RATE=$(jq -r '.baudRate // "38400"' "${ET_RADIO_CONFIG}" 2>/dev/null || echo "38400")
+    RADIO_MODEL=$(jq -r '.model // ""' "${ET_RADIO_CONFIG}" 2>/dev/null || echo "")
+  fi
+  
+  echo "${BAUD_RATE}|${RADIO_MODEL}"
+}
+
+# Configure Pat for VARA HF or FM
+configure_pat() {
+  local mode="$1"  # HF or FM
+  local port="$2"
+  local data_port=$((port + 1))
+  
+  echo -e "${BLUE}  → Configuring Pat for VARA ${mode}${NC}"
+  
+  # Get ET variables
+  local et_vars=$(get_et_vars)
+  local CALLSIGN=$(echo "$et_vars" | cut -d'|' -f1)
+  local GRID=$(echo "$et_vars" | cut -d'|' -f2)
+  local WINLINK_PASSWD=$(echo "$et_vars" | cut -d'|' -f3)
+  
+  # Check for valid callsign
+  if [ -z "$CALLSIGN" ] || [ "$CALLSIGN" = "N0CALL" ] || [ "$CALLSIGN" = "null" ]; then
+    echo -e "${RED}  ! ERROR: No valid callsign set${NC}"
+    echo -e "${YELLOW}    Run 'et-user' to set your callsign${NC}"
+    return 1
+  fi
+  
+  # Determine template file
+  local template_file
+  if [[ "${mode}" == "HF" ]]; then
+    template_file="${ET_CONF_TEMPLATE_DIR}/config.vara-hf.json"
+  else
+    template_file="${ET_CONF_TEMPLATE_DIR}/config.vara-fm.json"
+  fi
+  
+  # Check if template exists
+  if [[ ! -f "${template_file}" ]]; then
+    echo -e "${RED}  ! ERROR: Pat template not found: ${template_file}${NC}"
+    return 1
+  fi
+  
+  # Create Pat config directory
+  mkdir -p "$(dirname "${PAT_CONFIG}")"
+  
+  # Copy template
+  echo -e "${BLUE}  → Copying template: ${template_file}${NC}"
+  cp "${template_file}" "${PAT_CONFIG}"
+  
+  # Substitute ET variables using sed (matching et-winlink pattern)
+  sed -i "s|{{ET_CALLSIGN}}|${CALLSIGN}|g" "${PAT_CONFIG}"
+  sed -i "s|{{ET_WINLINK_PASSWD}}|${WINLINK_PASSWD}|g" "${PAT_CONFIG}"
+  sed -i "s|{{ET_GRID}}|${GRID}|g" "${PAT_CONFIG}"
+  
+  # Update VARA ports using jq
+  if command -v jq &>/dev/null; then
+    if [[ "${mode}" == "HF" ]]; then
+      jq ".varahf.cmdPort = ${port} | .varahf.dataPort = ${data_port}" "${PAT_CONFIG}" > "${PAT_CONFIG}.tmp" && mv "${PAT_CONFIG}.tmp" "${PAT_CONFIG}"
+    else
+      jq ".varafm.cmdPort = ${port} | .varafm.dataPort = ${data_port}" "${PAT_CONFIG}" > "${PAT_CONFIG}.tmp" && mv "${PAT_CONFIG}.tmp" "${PAT_CONFIG}"
+    fi
+    echo -e "${GREEN}  ✓ Pat configured for VARA ${mode} (cmd:${port}, data:${data_port})${NC}"
+  else
+    echo -e "${YELLOW}  ! WARNING: jq not found, ports not updated${NC}"
+  fi
+}
+
+# Start Pat HTTP server and open browser
+start_pat() {
+  if ! command -v pat &>/dev/null; then
+    echo -e "${RED}ERROR: 'pat' command not found${NC}"
+    echo -e "${YELLOW}Please install Pat Winlink first${NC}"
+    return 1
+  fi
+  
+  echo -e "${GREEN}>>> Starting Pat HTTP server...${NC}"
+  
+  # Kill any existing pat http processes
+  pkill -f "pat http" 2>/dev/null || true
+  sleep 1
+  
+  # Start pat http in background
+  pat http &>/dev/null &
+  sleep 3
+  
+  # Open browser
+  local pat_url="http://localhost:8080"
+  echo -e "${GREEN}>>> Opening browser to ${pat_url}${NC}"
+  
+  if command -v xdg-open &>/dev/null; then
+    xdg-open "${pat_url}" &>/dev/null &
+  elif command -v firefox &>/dev/null; then
+    firefox "${pat_url}" &>/dev/null &
+  elif command -v chromium-browser &>/dev/null; then
+    chromium-browser "${pat_url}" &>/dev/null &
+  else
+    echo -e "${YELLOW}Could not detect browser. Please open: ${pat_url}${NC}"
+  fi
+}
+
+################################################################################
+# INI Patching Functions
+################################################################################
+
+# Patch VARA HF/FM INI with new port
+patch_vara_ini_port() {
+  local mode="$1"  # HF or FM
+  local port="$2"
+  local ini=""
+
+  if [[ "${mode}" == "HF" ]]; then
+    ini="${VARA_HF_INI}"
+  else
+    ini="${VARA_FM_INI}"
+  fi
+
+  if [[ ! -f "${ini}" ]]; then
+    echo -e "${YELLOW}  ! INI file not found: ${ini}${NC}"
+    if [[ "${port}" == "8300" ]]; then
+      echo -e "${GREEN}  ✓ VARA ${mode} will use default port 8300 on first run${NC}"
+      return 0
+    else
+      echo -e "${YELLOW}  ! WARNING: VARA ${mode} hasn't been run yet${NC}"
+      echo -e "${YELLOW}    It will start with default port 8300${NC}"
+      echo -e "${YELLOW}    Close VARA ${mode} and restart this launcher to update the port${NC}"
+      return 0
+    fi
+  fi
+
+  echo -e "${BLUE}  → Updating ${ini}${NC}"
+  echo -e "${BLUE}     Setting TCP Command Port=${port}${NC}"
+  
+  cp "${ini}" "${ini}.backup" 2>/dev/null || true
+
+  # Simple sed replacement - most reliable for VARA INI files
+  sed -i "s/^TCP Command Port=.*/TCP Command Port=${port}/" "${ini}"
+  
+  # Verify the change
+  local new_port=$(grep "^TCP Command Port=" "${ini}" | cut -d= -f2)
+  if [[ "${new_port}" == "${port}" ]]; then
+    echo -e "${GREEN}  ✓ Successfully set TCP Command Port=${port}${NC}"
+  else
+    echo -e "${RED}  ! WARNING: Port may not have been set correctly${NC}"
+    echo -e "${YELLOW}    Expected: ${port}, Found: ${new_port}${NC}"
+  fi
+}
+
+# Patch Winlink Express INI with new port
+patch_winlink_ini() {
+  local mode="$1"  # HF or FM
+  local port="$2"
+
+  if [[ ! -f "${WINLINK_INI}" ]]; then
+    echo -e "${YELLOW}  ! Winlink Express INI not found: ${WINLINK_INI}${NC}"
+    echo -e "${YELLOW}    Winlink Express needs to be run at least once to generate its configuration${NC}"
+    echo -e "${YELLOW}    After first run, close Winlink and run this launcher again to update the port${NC}"
+    return 0
+  fi
+
+  if [[ "${mode}" == "HF" ]]; then
+    echo -e "${BLUE}  → Updating Winlink Express INI for VARA HF${NC}"
+    echo -e "${BLUE}     Setting TCP Port=${port} in [Vara TNC] section${NC}"
+    echo -e "${BLUE}     Disabling Auto Launch Vara${NC}"
+  else
+    echo -e "${BLUE}  → Updating Winlink Express INI for VARA FM${NC}"
+    echo -e "${BLUE}     Setting TCP Port=${port} in [Vara FM TNC] section${NC}"
+    echo -e "${BLUE}     Disabling Auto Launch Vara FM${NC}"
+  fi
+  
+  cp "${WINLINK_INI}" "${WINLINK_INI}.backup" 2>/dev/null || true
+
+  # Update the appropriate section based on mode
+  if [[ "${mode}" == "HF" ]]; then
+    # Update [Vara TNC] section for HF
+    awk -v port="${port}" '
+      /^\[Vara TNC\]/ { in_section=1 }
+      /^\[.*\]/ && !/^\[Vara TNC\]/ { in_section=0 }
+      in_section && /^TCP Port=/ { print "TCP Port=" port; next }
+      in_section && /^Auto Launch Vara=/ { print "Auto Launch Vara=False"; next }
+      { print }
+    ' "${WINLINK_INI}" > "${WINLINK_INI}.tmp" && mv "${WINLINK_INI}.tmp" "${WINLINK_INI}"
+    
+    # Verify the change
+    local new_port=$(awk '/^\[Vara TNC\]/,/^\[.*\]/ { if (/^TCP Port=/) print $0 }' "${WINLINK_INI}" | cut -d= -f2)
+    local auto_launch=$(awk '/^\[Vara TNC\]/,/^\[.*\]/ { if (/^Auto Launch Vara=/) print $0 }' "${WINLINK_INI}" | cut -d= -f2)
+    
+    if [[ "${new_port}" == "${port}" ]]; then
+      echo -e "${GREEN}  ✓ Successfully set VARA HF TCP Port=${port}${NC}"
+    else
+      echo -e "${RED}  ! WARNING: Port may not have been set correctly${NC}"
+      echo -e "${YELLOW}    Expected: ${port}, Found: ${new_port}${NC}"
+    fi
+    
+    if [[ "${auto_launch}" == "False" ]]; then
+      echo -e "${GREEN}  ✓ Auto Launch Vara disabled${NC}"
+    else
+      echo -e "${YELLOW}  ! Auto Launch Vara may not be disabled: ${auto_launch}${NC}"
+    fi
+  else
+    # Update [Vara FM TNC] section for FM
+    awk -v port="${port}" '
+      /^\[Vara FM TNC\]/ { in_section=1 }
+      /^\[.*\]/ && !/^\[Vara FM TNC\]/ { in_section=0 }
+      in_section && /^TCP Port=/ { print "TCP Port=" port; next }
+      in_section && /^Auto Launch Vara FM=/ { print "Auto Launch Vara FM=False"; next }
+      { print }
+    ' "${WINLINK_INI}" > "${WINLINK_INI}.tmp" && mv "${WINLINK_INI}.tmp" "${WINLINK_INI}"
+    
+    # Verify the change
+    local new_port=$(awk '/^\[Vara FM TNC\]/,/^\[.*\]/ { if (/^TCP Port=/) print $0 }' "${WINLINK_INI}" | cut -d= -f2)
+    local auto_launch=$(awk '/^\[Vara FM TNC\]/,/^\[.*\]/ { if (/^Auto Launch Vara FM=/) print $0 }' "${WINLINK_INI}" | cut -d= -f2)
+    
+    if [[ "${new_port}" == "${port}" ]]; then
+      echo -e "${GREEN}  ✓ Successfully set VARA FM TCP Port=${port}${NC}"
+    else
+      echo -e "${RED}  ! WARNING: Port may not have been set correctly${NC}"
+      echo -e "${YELLOW}    Expected: ${port}, Found: ${new_port}${NC}"
+    fi
+    
+    if [[ "${auto_launch}" == "False" ]]; then
+      echo -e "${GREEN}  ✓ Auto Launch Vara FM disabled${NC}"
+    else
+      echo -e "${YELLOW}  ! Auto Launch Vara FM may not be disabled: ${auto_launch}${NC}"
+    fi
+  fi
+}
+
+# Patch VarAC INI for HF or FM
+patch_varac_ini() {
+  local mode="$1"  # HF or FM
+  local port="$2"
+
+  [[ -f "${VARAC_INI}" ]] || return 0
+
+  echo -e "${BLUE}  → Updating VarAC INI for VARA ${mode} (port ${port})${NC}"
+  cp "${VARAC_INI}" "${VARAC_INI}.backup" 2>/dev/null || true
+
+  # Get radio configuration
+  local radio_config=$(get_radio_config)
+  local baud_rate=$(echo "$radio_config" | cut -d'|' -f1)
+  local radio_model=$(echo "$radio_config" | cut -d'|' -f2)
+  
+  echo -e "${BLUE}     Setting COM port: COM10, Baud rate: ${baud_rate}${NC}"
+  if [[ -n "${radio_model}" ]]; then
+    echo -e "${BLUE}     Radio model: ${radio_model}${NC}"
+  fi
+
+  if [[ "${mode}" == "HF" ]]; then
+    # Set VarAC to use VARA HF mode
+    VARAC_INI="${VARAC_INI}" port="${port}" baud_rate="${baud_rate}" python3 - <<'PYTHON_EOF'
+import configparser
+import sys
+import os
+
+config = configparser.ConfigParser()
+config.read(os.environ['VARAC_INI'])
+
+# Main settings - set modem type to HF
+if 'Settings' not in config:
+    config['Settings'] = {}
+config['Settings']['ModemMode'] = 'VARAHF'
+config['Settings']['VaraModemType'] = 'VaraHF'
+
+# VARAHF_CONFIG section
+if 'VARAHF_CONFIG' not in config:
+    config['VARAHF_CONFIG'] = {}
+config['VARAHF_CONFIG']['VaraModemType'] = 'VaraHF'
+config['VARAHF_CONFIG']['VarahfMainPort'] = os.environ['port']
+config['VARAHF_CONFIG']['VarahfLaunchOnModemConnect'] = 'OFF'
+config['VARAHF_CONFIG']['StartModemUponStartup'] = 'OFF'
+config['VARAHF_CONFIG']['AutoStartModem'] = 'OFF'
+
+# RIG_COM_CONFIGS section - set COM port and baud rate
+if 'RIG_COM_CONFIGS' not in config:
+    config['RIG_COM_CONFIGS'] = {}
+config['RIG_COM_CONFIGS']['ComPort'] = 'COM10'
+config['RIG_COM_CONFIGS']['BaudRate'] = os.environ['baud_rate']
+
+# Global auto-launch disable
+if 'Modem' not in config:
+    config['Modem'] = {}
+config['Modem']['StartModemUponStartup'] = 'OFF'
+config['Modem']['AutoLaunch'] = 'OFF'
+
+with open(os.environ['VARAC_INI'], 'w') as f:
+    config.write(f, space_around_delimiters=False)
+PYTHON_EOF
+  else
+    # Set VarAC to use VARA FM mode
+    VARAC_INI="${VARAC_INI}" port="${port}" baud_rate="${baud_rate}" python3 - <<'PYTHON_EOF'
+import configparser
+import sys
+import os
+
+config = configparser.ConfigParser()
+config.read(os.environ['VARAC_INI'])
+
+# Main settings - set modem type to FM
+if 'Settings' not in config:
+    config['Settings'] = {}
+config['Settings']['ModemMode'] = 'VARAFM'
+config['Settings']['VaraModemType'] = 'VaraFM'
+
+# VARAFM_CONFIG section
+if 'VARAFM_CONFIG' not in config:
+    config['VARAFM_CONFIG'] = {}
+config['VARAFM_CONFIG']['VaraModemType'] = 'VaraFM'
+config['VARAFM_CONFIG']['VarafmMainPort'] = os.environ['port']
+config['VARAFM_CONFIG']['VarafmLaunchOnModemConnect'] = 'OFF'
+config['VARAFM_CONFIG']['StartModemUponStartup'] = 'OFF'
+config['VARAFM_CONFIG']['AutoStartModem'] = 'OFF'
+
+# RIG_COM_CONFIGS section - set COM port and baud rate
+if 'RIG_COM_CONFIGS' not in config:
+    config['RIG_COM_CONFIGS'] = {}
+config['RIG_COM_CONFIGS']['ComPort'] = 'COM10'
+config['RIG_COM_CONFIGS']['BaudRate'] = os.environ['baud_rate']
+
+# Global auto-launch disable
+if 'Modem' not in config:
+    config['Modem'] = {}
+config['Modem']['StartModemUponStartup'] = 'OFF'
+config['Modem']['AutoLaunch'] = 'OFF'
+
+with open(os.environ['VARAC_INI'], 'w') as f:
+    config.write(f, space_around_delimiters=False)
+PYTHON_EOF
+  fi
+  
+  echo -e "${GREEN}  ✓ VarAC configured (COM10, ${baud_rate} baud, auto-launch disabled)${NC}"
+}
+
+
+
+################################################################################
+# Launch Functions
+################################################################################
+
+start_winlink() {
+  if [[ ! -e "${WINLINK_EXE}" ]]; then
+    echo -e "${RED}ERROR: Winlink not found at: ${WINLINK_EXE}${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}>>> Starting Winlink Express...${NC}"
+  WINEPREFIX="${WINEPREFIX}" "${WINE_BIN}" "${WINLINK_EXE}" >/dev/null 2>&1 &
+  sleep 2
+}
+
+start_varac() {
+  if [[ ! -e "${VARAC_EXE}" ]]; then
+    echo -e "${RED}ERROR: VarAC not found at: ${VARAC_EXE}${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}>>> Starting VarAC...${NC}"
+  local dir base
+  dir="$(dirname "${VARAC_EXE}")"
+  base="$(basename "${VARAC_EXE}")"
+
+  (
+    cd "${dir}" || exit 1
+    WINEPREFIX="${WINEPREFIX}" "${WINE_BIN}" "${base}" >/dev/null 2>&1 &
+  )
+  sleep 2
+}
+
+start_vara_hf() {
+  if [[ ! -e "${VARA_HF_EXE}" ]]; then
+    echo -e "${RED}ERROR: VARA HF not found at: ${VARA_HF_EXE}${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}>>> Starting VARA HF...${NC}"
+  WINEPREFIX="${WINEPREFIX}" "${WINE_BIN}" "${VARA_HF_EXE}" >/dev/null 2>&1 &
+  sleep 3
+}
+
+start_vara_fm() {
+  if [[ ! -e "${VARA_FM_EXE}" ]]; then
+    echo -e "${RED}ERROR: VARA FM not found at: ${VARA_FM_EXE}${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}>>> Starting VARA FM...${NC}"
+  WINEPREFIX="${WINEPREFIX}" "${WINE_BIN}" "${VARA_FM_EXE}" >/dev/null 2>&1 &
+  sleep 3
+}
+
+################################################################################
+# Menu
+################################################################################
+
+show_menu() {
+  clear
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}           ETC VARA Launcher${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo ""
+  echo "Select configuration:"
+  echo ""
+  echo "  1) VarAC + VARA HF"
+  echo "  2) VarAC + VARA FM"
+  echo "  3) Winlink + VARA HF"
+  echo "  4) Winlink + VARA FM"
+  echo "  5) Winlink Other (ARDOP/Telnet - no VARA)"
+  echo "  6) Pat + VARA HF"
+  echo "  7) Pat + VARA FM"
+  echo "  8) VARA HF Modem Only"
+  echo "  9) VARA FM Modem Only"
+  echo " 10) Exit"
+  echo ""
+  echo -n "Enter choice [1-10]: "
+}
+
+################################################################################
+# Main
+################################################################################
+
+main() {
+  # Always cleanup first
+  global_cleanup
+
+  # Show menu
+  show_menu
+  read -r CHOICE
+
+  case "${CHOICE}" in
+    1)
+      # VarAC + VARA HF
+      echo
+      echo -e "${BLUE}Selected: VarAC + VARA HF${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "HF" "${PORT}"
+      patch_varac_ini "HF" "${PORT}"
+      
+      echo
+      # Start VarAC first, then VARA to avoid crashes
+      start_varac
+      sleep 2
+      start_vara_hf
+      ;;
+
+    2)
+      # VarAC + VARA FM
+      echo
+      echo -e "${BLUE}Selected: VarAC + VARA FM${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "FM" "${PORT}"
+      patch_varac_ini "FM" "${PORT}"
+      
+      echo
+      # Start VarAC first, then VARA to avoid crashes
+      start_varac
+      sleep 2
+      start_vara_fm
+      ;;
+
+    3)
+      # Winlink + VARA HF
+      echo
+      echo -e "${BLUE}Selected: Winlink + VARA HF${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "HF" "${PORT}"
+      patch_winlink_ini "HF" "${PORT}"
+      
+      echo
+      start_vara_hf
+      start_winlink
+      ;;
+
+    4)
+      # Winlink + VARA FM
+      echo
+      echo -e "${BLUE}Selected: Winlink + VARA FM${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "FM" "${PORT}"
+      patch_winlink_ini "FM" "${PORT}"
+      
+      # Give the INI changes time to be written to disk
+      sync
+      sleep 1
+      
+      echo
+      start_vara_fm
+      
+      # Wait for VARA FM to fully initialize before starting Winlink
+      sleep 3
+      
+      start_winlink
+      ;;
+
+    5)
+      # Winlink Other (no VARA)
+      echo
+      echo -e "${BLUE}Selected: Winlink Other (ARDOP/Telnet - no VARA)${NC}"
+      
+      echo
+      start_winlink
+      
+      echo
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}  Winlink started without VARA modem${NC}"
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}Use ARDOP, Telnet, or other non-VARA modes${NC}"
+      echo
+      exit 0
+      ;;
+
+    6)
+      # Pat + VARA HF
+      echo
+      echo -e "${BLUE}Selected: Pat + VARA HF${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating configuration files..."
+      patch_vara_ini_port "HF" "${PORT}"
+      configure_pat "HF" "${PORT}"
+      
+      echo
+      start_vara_hf
+      start_pat
+      ;;
+
+    7)
+      # Pat + VARA FM
+      echo
+      echo -e "${BLUE}Selected: Pat + VARA FM${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+      
+      echo
+      echo "Updating configuration files..."
+      patch_vara_ini_port "FM" "${PORT}"
+      configure_pat "FM" "${PORT}"
+      
+      echo
+      start_vara_fm
+      start_pat
+      ;;
+
+    8)
+      # VARA HF Modem Only
+      echo
+      echo -e "${BLUE}Selected: VARA HF Modem Only${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "HF" "${PORT}"
+      
+      echo
+      start_vara_hf
+      
+      IP_ADDR=$(get_primary_ip)
+      echo
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}  VARA HF Modem Only - Ready${NC}"
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}  Connect to: ${IP_ADDR}:${PORT}${NC}"
+      echo -e "${GREEN}================================================================${NC}"
+      echo
+      exit 0
+      ;;
+
+    9)
+      # VARA FM Modem Only
+      echo
+      echo -e "${BLUE}Selected: VARA FM Modem Only${NC}"
+      
+      PORT=$(find_free_port) || {
+        echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+        exit 1
+      }
+      
+      echo
+      echo "Updating INI files..."
+      patch_vara_ini_port "FM" "${PORT}"
+      
+      echo
+      start_vara_fm
+      
+      IP_ADDR=$(get_primary_ip)
+      echo
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}  VARA FM Modem Only - Ready${NC}"
+      echo -e "${GREEN}================================================================${NC}"
+      echo -e "${GREEN}  Connect to: ${IP_ADDR}:${PORT}${NC}"
+      echo -e "${GREEN}================================================================${NC}"
+      echo
+      exit 0
+      ;;
+
+    10)
+      echo "Exiting."
+      exit 0
+      ;;
+
+    *)
+      echo -e "${RED}Invalid choice${NC}"
+      exit 1
+      ;;
+  esac
+
+  echo
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}  Launch complete${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}  Wine prefix: ${WINEPREFIX}${NC}"
+  echo -e "${GREEN}  TCP port: ${PORT}${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+}
+
+main

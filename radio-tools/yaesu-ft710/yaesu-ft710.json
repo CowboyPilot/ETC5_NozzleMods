@@ -1,0 +1,20 @@
+{
+  "id": "yaesu-ft710",
+  "vendor": "Yaesu",
+  "model": "FT-710",
+  "rigctrl": {
+    "id": "1049",
+    "baud": "38400",
+    "ptt": "RIG"
+  },
+  "notes": [
+    "031 CAT RATE = 38400bps",
+    "032 CAT TOT = 100ms",
+    "FUNC - RADIO SETTING - MODE PSK/DATA",
+    "  -USB OUT LEVEL 30",
+    "  -USB MOD GAIN 70",
+    "Select Mode DATA-U"
+  ],
+  "fieldNotes": [
+  ]
+}

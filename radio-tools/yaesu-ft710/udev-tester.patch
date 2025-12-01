@@ -1,0 +1,33 @@
+--- /mnt/user-data/uploads/udev-tester.sh	2025-11-30 22:37:06.695147676 +0000
++++ udev-tester.sh	2025-11-30 22:20:34.000000000 +0000
+@@ -69,6 +69,20 @@
+   exit 1
+ }
+ 
++# Exit with a 0 exit status if, and only if, the currently selected radio is
++# a Yaesu FT-710.
++test_yaesu_ft710() {
++  if [ -L "${ET_HOME}/conf/radios.d/active-radio.json" ]; then
++    ID=$(cat "${ET_HOME}/conf/radios.d/active-radio.json" | jq -r .id)
++
++    if [[ "$ID" == "yaesu-ft710" ]]; then
++      exit 0
++    fi
++  fi
++  
++  exit 1
++}
++
+ # Exit with a 0 exit status if, and only if, the currently selected radio 
+ # uses a DigiRig Mobile.
+ test_digirig_mobile() {
+@@ -127,6 +141,9 @@
+   yaesu-ft991a)
+     test_yaesu_ft991a
+   ;;
++  yaesu-ft710)
++    test_yaesu_ft710
++  ;;
+   digirig-mobile)
+     test_digirig_mobile
+   ;;
