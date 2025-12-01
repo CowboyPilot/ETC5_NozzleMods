@@ -1,27 +1,26 @@
 #!/bin/bash
 ################################################################################
-# ETC R5 VARA Tools Installer
+# NozzleMods Installer for EmComm Tools R5
 #
-# This script downloads and installs all VARA tools for EmComm Tools R5:
-#   - 10-install-all.sh → ~/add-ons/wine/
-#   - vara-downloader.sh → ~/add-ons/wine/
-#   - etc-vara → /opt/emcomm-tools/bin/
-#   - fix-sources.sh → ~/
-#   - update-g90-config.sh → ~/
+# This script downloads and installs all NozzleMods tools:
+#   - nozzle-menu → /opt/emcomm-tools/bin/
+#   - wine-tools/ → ~/NozzleMods/wine-tools/
+#   - radio-tools/ → ~/NozzleMods/radio-tools/
+#   - linux-tools/ → ~/NozzleMods/linux-tools/
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETCR5_VARA_TOOLS/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh | bash
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/CowboyPilot/ETCR5_VARA_TOOLS/main/install.sh
+#   wget https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh
 #   chmod +x install.sh
 #   ./install.sh
 ################################################################################
 
 set -euo pipefail
 
-# GitHub repository
-REPO_URL="https://raw.githubusercontent.com/CowboyPilot/ETCR5_VARA_TOOLS/main"
+# GitHub repository - UPDATE THIS TO YOUR REPO
+REPO_URL="https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main"
 
 # Colors for output
 RED='\033[1;31m'
@@ -31,9 +30,8 @@ BLUE='\033[1;34m'
 NC='\033[0m' # No Color
 
 # Installation paths
-WINE_ADDONS_DIR="${HOME}/add-ons/wine"
+NOZZLE_DIR="${HOME}/NozzleMods"
 ETC_BIN_DIR="/opt/emcomm-tools/bin"
-HOME_DIR="${HOME}"
 
 ################################################################################
 # Helper Functions
@@ -109,7 +107,7 @@ preflight_checks() {
   
   # Verify we can access GitHub
   print_info "Checking GitHub connectivity..."
-  if curl -fsSL --connect-timeout 10 "${REPO_URL}/README.md" > /dev/null 2>&1; then
+  if curl -fsSL --connect-timeout 10 "${REPO_URL}/install.sh" > /dev/null 2>&1; then
     print_success "GitHub accessible"
   else
     print_error "Cannot reach GitHub repository"
@@ -123,45 +121,110 @@ preflight_checks() {
 }
 
 ################################################################################
+# Download Functions
+################################################################################
+
+download_file() {
+  local url="$1"
+  local dest="$2"
+  
+  print_info "Downloading $(basename "$dest")..."
+  if curl -fsSL "$url" -o "$dest"; then
+    print_success "Downloaded $(basename "$dest")"
+    
+    # Make executable if it's a .sh file
+    if [[ "$dest" == *.sh ]]; then
+      chmod +x "$dest"
+      print_info "Made executable: $(basename "$dest")"
+    fi
+    return 0
+  else
+    print_error "Failed to download $(basename "$dest")"
+    return 1
+  fi
+}
+
+################################################################################
 # Installation Functions
 ################################################################################
 
-install_10_install-all() {
-  print_header "Installing 10-install-all.sh"
+install_directory_structure() {
+  print_header "Creating Directory Structure"
   
-  # Create directory if it doesn't exist
-  print_info "Creating directory: ${WINE_ADDONS_DIR}"
-  mkdir -p "${WINE_ADDONS_DIR}"
+  # Create main directory
+  print_info "Creating ${NOZZLE_DIR}..."
+  mkdir -p "${NOZZLE_DIR}"
   
-  # Download main script
-  print_info "Downloading 10-install-all.sh from GitHub..."
-  if curl -fsSL "${REPO_URL}/10-install-all.sh" -o "${WINE_ADDONS_DIR}/10-install-all.sh"; then
-    print_success "Downloaded 10-install-all.sh"
-  else
-    print_error "Failed to download 10-install-all.sh"
-    return 1
-  fi
-
-  # Make executable
-  print_info "Setting executable permissions..."
-  chmod +x "${WINE_ADDONS_DIR}/10-install-all.sh"
-  chmod +x "${WINE_ADDONS_DIR}/vara-downloader.sh" 2>/dev/null || true
-  print_success "Set executable: ${WINE_ADDONS_DIR}/10-install-all.sh"
+  # Create subdirectories
+  mkdir -p "${NOZZLE_DIR}/bin"
+  mkdir -p "${NOZZLE_DIR}/wine-tools"
+  mkdir -p "${NOZZLE_DIR}/radio-tools/xiegu-g90"
+  mkdir -p "${NOZZLE_DIR}/radio-tools/yaesu-ft710"
+  mkdir -p "${NOZZLE_DIR}/linux-tools"
   
-  echo
-  print_success "10-install-all.sh installed successfully"
+  print_success "Directory structure created"
 }
 
-install_etc_vara() {
-  print_header "Installing etc-vara"
+install_wine_tools() {
+  print_header "Installing Wine Tools"
+  
+  download_file "${REPO_URL}/wine-tools/wine-setup.sh" \
+    "${NOZZLE_DIR}/wine-tools/wine-setup.sh"
+  
+  download_file "${REPO_URL}/wine-tools/fix-varac-13.sh" \
+    "${NOZZLE_DIR}/wine-tools/fix-varac-13.sh"
+  
+  print_success "Wine tools installed"
+}
+
+install_radio_tools() {
+  print_header "Installing Radio Tools"
+  
+  # Xiegu G90
+  print_info "Installing Xiegu G90 tools..."
+  download_file "${REPO_URL}/radio-tools/xiegu-g90/update-g90-config.sh" \
+    "${NOZZLE_DIR}/radio-tools/xiegu-g90/update-g90-config.sh"
+  
+  # Yaesu FT-710
+  print_info "Installing Yaesu FT-710 tools..."
+  download_file "${REPO_URL}/radio-tools/yaesu-ft710/install_ft710.sh" \
+    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/install_ft710.sh"
+  
+  download_file "${REPO_URL}/radio-tools/yaesu-ft710/yaesu-ft710.json" \
+    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/yaesu-ft710.json"
+  
+  download_file "${REPO_URL}/radio-tools/yaesu-ft710/78-et-ft710.rules" \
+    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/78-et-ft710.rules"
+  
+  download_file "${REPO_URL}/radio-tools/yaesu-ft710/udev-tester.patch" \
+    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/udev-tester.patch"
+  
+  print_success "Radio tools installed"
+}
+
+install_linux_tools() {
+  print_header "Installing Linux Tools"
+  
+  download_file "${REPO_URL}/linux-tools/fix-sources.sh" \
+    "${NOZZLE_DIR}/linux-tools/fix-sources.sh"
+  
+  print_success "Linux tools installed"
+}
+
+install_nozzle_menu() {
+  print_header "Installing Nozzle Menu"
+  
+  # Download to bin directory first
+  download_file "${REPO_URL}/bin/nozzle-menu" \
+    "${NOZZLE_DIR}/bin/nozzle-menu"
   
   # Check if we can write to /opt/emcomm-tools/bin
   if [ ! -d "${ETC_BIN_DIR}" ]; then
     print_warning "Directory ${ETC_BIN_DIR} does not exist"
     print_info "This is normal if EmComm Tools is not fully set up"
-    print_info "You can install etc-vara manually later with:"
-    echo "  sudo wget -O /opt/emcomm-tools/bin/etc-vara ${REPO_URL}/etc-vara"
-    echo "  sudo chmod +x /opt/emcomm-tools/bin/etc-vara"
+    print_info "You can install nozzle-menu manually later with:"
+    echo "  sudo cp ${NOZZLE_DIR}/bin/nozzle-menu /opt/emcomm-tools/bin/"
+    echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
     return 0
   fi
   
@@ -170,87 +233,39 @@ install_etc_vara() {
     print_info "Attempting to install with sudo..."
     
     # Try with sudo
-    if sudo wget -O "${ETC_BIN_DIR}/etc-vara" "${REPO_URL}/etc-vara" 2>/dev/null && \
-       sudo chmod +x "${ETC_BIN_DIR}/etc-vara" 2>/dev/null; then
-      print_success "Installed etc-vara with sudo"
+    if sudo cp "${NOZZLE_DIR}/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+       sudo chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
+      print_success "Installed nozzle-menu with sudo"
     else
-      print_error "Failed to install etc-vara"
+      print_error "Failed to install nozzle-menu"
       print_info "You can install it manually later with:"
-      echo "  sudo wget -O /opt/emcomm-tools/bin/etc-vara ${REPO_URL}/etc-vara"
-      echo "  sudo chmod +x /opt/emcomm-tools/bin/etc-vara"
+      echo "  sudo cp ${NOZZLE_DIR}/bin/nozzle-menu /opt/emcomm-tools/bin/"
+      echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
       return 1
     fi
   else
     # Can write without sudo
-    print_info "Downloading etc-vara from GitHub..."
-    if wget -O "${ETC_BIN_DIR}/etc-vara" "${REPO_URL}/etc-vara" 2>/dev/null && \
-       chmod +x "${ETC_BIN_DIR}/etc-vara" 2>/dev/null; then
-      print_success "Installed etc-vara"
+    print_info "Copying nozzle-menu to ${ETC_BIN_DIR}..."
+    if cp "${NOZZLE_DIR}/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+       chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
+      print_success "Installed nozzle-menu"
     else
-      print_error "Failed to install etc-vara"
+      print_error "Failed to install nozzle-menu"
       return 1
     fi
   fi
   
   echo
-  print_success "etc-vara installed successfully"
+  print_success "nozzle-menu installed successfully"
 }
 
-install_fix-sources() {
-  print_header "Installing fix-sources.sh"
+install_self() {
+  print_header "Installing installer script"
   
-  print_info "Downloading fix-sources.sh from GitHub..."
-  if curl -fsSL "${REPO_URL}/fix-sources.sh" -o "${HOME_DIR}/fix-sources.sh"; then
-    print_success "Downloaded fix-sources.sh"
-  else
-    print_error "Failed to download fix-sources.sh"
-    return 1
-  fi
+  download_file "${REPO_URL}/install.sh" \
+    "${NOZZLE_DIR}/install.sh"
   
-  print_info "Setting executable permissions..."
-  chmod +x "${HOME_DIR}/fix-sources.sh"
-  print_success "Set executable: ${HOME_DIR}/fix-sources.sh"
-  
-  echo
-  print_success "fix-sources.sh installed successfully"
-}
-
-install_fix-varac13() {
-  print_header "Installing fix-varac-13.sh"
-  
-  print_info "Downloading fix-varac-13.sh from GitHub..."
-  if curl -fsSL "${REPO_URL}/fix-varac-13.sh" -o "${HOME_DIR}/fix-varac-13.sh"; then
-    print_success "Downloaded fix-varac-13.sh"
-  else
-    print_error "Failed to download fix-varac-13.sh"
-    return 1
-  fi
-  
-  print_info "Setting executable permissions..."
-  chmod +x "${HOME_DIR}/fix-varac-13.sh"
-  print_success "Set executable: ${HOME_DIR}/fix-varac-13.sh"
-  
-  echo
-  print_success "fix-varac-13.sh installed successfully"
-}
-
-install_update_g90() {
-  print_header "Installing update-g90-config.sh"
-  
-  print_info "Downloading update-g90-config.sh from GitHub..."
-  if curl -fsSL "${REPO_URL}/update-g90-config.sh" -o "${HOME_DIR}/update-g90-config.sh"; then
-    print_success "Downloaded update-g90-config.sh"
-  else
-    print_error "Failed to download update-g90-config.sh"
-    return 1
-  fi
-  
-  print_info "Setting executable permissions..."
-  chmod +x "${HOME_DIR}/update-g90-config.sh"
-  print_success "Set executable: ${HOME_DIR}/update-g90-config.sh"
-  
-  echo
-  print_success "update-g90-config.sh installed successfully"
+  print_success "Installer script saved to ${NOZZLE_DIR}/install.sh"
 }
 
 ################################################################################
@@ -260,65 +275,52 @@ install_update_g90() {
 show_next_steps() {
   print_header "Installation Complete!"
   
-  echo "All scripts have been installed:"
+  echo "All scripts have been installed to:"
+  echo "  ${NOZZLE_DIR}"
   echo
-  echo -e "${GREEN}1. 10-install-all.sh${NC}"
-  echo "   Location: ${WINE_ADDONS_DIR}/10-install-all.sh"
-  echo "   Purpose:  Install Winlink, VarAC, and VARA HF/FM"
-  echo
-  echo -e "${GREEN}2. etc-vara${NC}"
-  echo "   Location: ${ETC_BIN_DIR}/etc-vara"
-  echo "   Purpose:  Launch VARA applications with smart port management"
-  echo
-  echo -e "${GREEN}3. fix-sources.sh${NC}"
-  echo "   Location: ${HOME_DIR}/fix-sources.sh"
-  echo "   Purpose:  Fix APT repository issues (if needed)"
-  echo
-  echo -e "${GREEN}4. update-g90-config.sh${NC}"
-  echo "   Location: ${HOME_DIR}/update-g90-config.sh"
-  echo "   Purpose:  Configure Xiegu G90 DigiRig PTT options"
-  echo
-  
-  print_header "Next Steps"
-  
-  echo -e "${YELLOW}Before continuing, ensure you have:${NC}"
-  echo "  • Run 'et-user' to set your callsign"
-  echo "  • Run 'et-audio' to configure audio"
-  echo "  • Run 'et-radio' to configure your radio"
+  echo -e "${GREEN}Directory Structure:${NC}"
+  echo "  NozzleMods/"
+  echo "  ├── bin/"
+  echo "  │   └── nozzle-menu"
+  echo "  ├── wine-tools/"
+  echo "  │   ├── wine-setup.sh"
+  echo "  │   └── fix-varac-13.sh"
+  echo "  ├── radio-tools/"
+  echo "  │   ├── xiegu-g90/"
+  echo "  │   │   └── update-g90-config.sh"
+  echo "  │   └── yaesu-ft710/"
+  echo "  │       ├── install_ft710.sh"
+  echo "  │       ├── yaesu-ft710.json"
+  echo "  │       ├── 78-et-ft710.rules"
+  echo "  │       └── udev-tester.patch"
+  echo "  └── linux-tools/"
+  echo "      └── fix-sources.sh"
   echo
   
-  echo -e "${YELLOW}Download required installers:${NC}"
-  echo "  • VarAC installer (VarAC_Installer*.exe)"
-  echo "  • VARA HF installer (optional)"
-  echo "  • VARA FM installer (optional)"
+  print_header "Quick Start"
+  
+  echo -e "${BLUE}To access all features:${NC}"
+  echo "  nozzle-menu"
   echo
-  echo "  Place them in: ${WINE_ADDONS_DIR}/"
-  echo "             or: ${HOME}/Downloads/"
+  echo -e "${BLUE}Or run tools directly:${NC}"
+  echo
+  echo -e "${YELLOW}Wine/VARA Tools:${NC}"
+  echo "  ${NOZZLE_DIR}/wine-tools/wine-setup.sh"
+  echo "  ${NOZZLE_DIR}/wine-tools/fix-varac-13.sh"
+  echo
+  echo -e "${YELLOW}Radio Configuration:${NC}"
+  echo "  sudo ${NOZZLE_DIR}/radio-tools/xiegu-g90/update-g90-config.sh"
+  echo "  sudo ${NOZZLE_DIR}/radio-tools/yaesu-ft710/install_ft710.sh"
+  echo
+  echo -e "${YELLOW}Linux System Tools:${NC}"
+  echo "  sudo ${NOZZLE_DIR}/linux-tools/fix-sources.sh"
   echo
   
-  echo -e "${BLUE}To install VARA applications:${NC}"
-  echo "  cd ${WINE_ADDONS_DIR}"
-  echo "  ./10-install-all.sh"
-  echo
-  echo -e "${GREEN}Note:${NC} The first run may patch your environment and require"
-  echo "      you to log out and back in. After re-logging, run it again."
-  echo
-  
-  echo -e "${BLUE}To launch VARA applications:${NC}"
-  echo "  etc-vara"
-  echo
-  
-  echo -e "${BLUE}If you have APT/repository issues:${NC}"
-  echo "  sudo ~/fix-sources.sh"
-  echo
-  
-  echo -e "${BLUE}If you have a Xiegu G90 with DigiRig:${NC}"
-  echo "  sudo ~/update-g90-config.sh"
-  echo
-  
-  print_header "Installation Summary"
-  echo "For detailed documentation, visit:"
-  echo "  https://github.com/CowboyPilot/ETCR5_VARA_TOOLS"
+  print_header "Notes"
+  echo "• nozzle-menu has been installed to /opt/emcomm-tools/bin/"
+  echo "• Run 'nozzle-menu' from anywhere to access the main menu"
+  echo "• All other tools remain in ${NOZZLE_DIR}"
+  echo "• You can re-run this installer to update all scripts"
   echo
   echo "73!"
   echo
@@ -333,7 +335,7 @@ main() {
   echo
   echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
   echo -e "${GREEN}║                                                            ║${NC}"
-  echo -e "${GREEN}║           ETC R5 VARA Tools Installer                      ║${NC}"
+  echo -e "${GREEN}║              NozzleMods Installer for ETC R5               ║${NC}"
   echo -e "${GREEN}║                                                            ║${NC}"
   echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
   echo
@@ -343,26 +345,35 @@ main() {
   
   # Install components
   echo
-  install_10_install-all || {
-    print_error "Failed to install 10-install-all.sh"
+  install_directory_structure
+  
+  echo
+  install_wine_tools || {
+    print_error "Failed to install wine tools"
     echo "Continuing with other installations..."
   }
   
   echo
-  install_etc_vara || {
-    print_error "Failed to install etc-vara"
+  install_radio_tools || {
+    print_error "Failed to install radio tools"
     echo "Continuing with other installations..."
   }
   
   echo
-  install_fix-sources || {
-    print_error "Failed to install fix-sources.sh"
+  install_linux_tools || {
+    print_error "Failed to install linux tools"
+    echo "Continuing with other installations..."
+  }
+  
+  echo
+  install_nozzle_menu || {
+    print_error "Failed to install nozzle-menu"
     echo "Continuing..."
   }
   
   echo
-  install_update_g90 || {
-    print_error "Failed to install update-g90-config.sh"
+  install_self || {
+    print_error "Failed to save installer script"
     echo "Continuing..."
   }
   
