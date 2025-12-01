@@ -79,82 +79,103 @@ trap cleanup_vara_html EXIT
 download_vara_installer() {
   local pattern="$1"  # Pattern to match (e.g., "VARA%20HF" or "VARA%20FM")
   local mode="$2"     # "HF" or "FM" for display purposes
-  
+
   echo "[*] Attempting to download latest VARA ${mode} installer..."
-  
+  echo "    Working directory: $(pwd)"
+
   # 1. Fetch main VARA download page as HTML
   echo "    Fetching VARA product index..."
   if ! curl -s -f -L -o "${VARA_HTML_FILE}" "${VARA_INDEX_URL}"; then
     echo "[!] Error fetching VARA index page: ${VARA_INDEX_URL}"
     return 1
   fi
-  
+
   # 2. Extract links matching the pattern (using grep and basic parsing)
   local vara_file_path=""
-  
-  # Extract all href attributes and filter for our pattern
-  vara_file_path=$(grep -o 'href="[^"]*'"${pattern}"'[^"]*"' "${VARA_HTML_FILE}" | \
-                   sed 's/href="//g' | sed 's/"//g' | \
-                   grep -i '\.zip$' | head -n 1)
-  
+
+  # Extract all href attributes and filter for our pattern and .zip
+  vara_file_path=$(
+    grep -o 'href="[^"]*'"${pattern}"'[^"]*"' "${VARA_HTML_FILE}" | \
+      sed 's/^href="//; s/"$//' | \
+      grep -i '\.zip$' | \
+      head -n 1
+  )
+
   if [[ -z "${vara_file_path}" ]]; then
     echo "[!] Error: Could not find VARA ${mode} file matching pattern: ${pattern}"
+    echo "    Try checking VARA_INDEX_URL or pattern."
     return 1
   fi
-  
+
   # 3. Construct full URL and download
-  local full_url="${VARA_BASE_URL}${vara_file_path}"
-  local zip_filename=$(basename "${vara_file_path}")
-  
-  echo "    Found: ${vara_file_path}"
+  local full_url
+  if [[ "${vara_file_path}" =~ ^https?:// ]]; then
+    full_url="${vara_file_path}"
+  else
+    # Ensure exactly one slash between base and path
+    full_url="${VARA_BASE_URL%/}/${vara_file_path#./}"
+  fi
+
+  local zip_filename
+  zip_filename="$(basename "${vara_file_path}")"
+
+  echo "    Found path: ${vara_file_path}"
   echo "    Downloading: ${full_url}"
-  
+  echo "    Saving as: ${zip_filename}"
+
   if ! curl -s -f -L -o "${zip_filename}" "${full_url}"; then
     echo "[!] Failed to download VARA ${mode} installer"
     return 1
   fi
-  
+
   echo "    Downloaded: ${zip_filename}"
-  
-  # 4. Extract the ZIP file
+
+  # 4. Extract the ZIP file into current directory
   echo "    Extracting ${zip_filename}..."
   if ! unzip -o "${zip_filename}" >/dev/null 2>&1; then
     echo "[!] Failed to extract ${zip_filename}"
     return 1
   fi
-  
-  # 5. Find the extracted .exe (more specific matching)
+
+  # 5. Find the extracted .exe (more specific matching, NO -newer filter)
   local exe_file=""
   if [[ "${mode}" == "HF" ]]; then
     # For HF: look for setup files with "VARA" but NOT "FM" or "VarAC"
-    exe_file=$(find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null | \
-               grep -i "vara" | \
-               grep -iv "varac" | \
-               grep -iv "fm" | \
-               grep -iE "setup|install|^./VARA" | \
-               head -n 1 || true)
+    exe_file=$(
+      find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null | \
+        grep -i "vara" | \
+        grep -iv "varac" | \
+        grep -iv "fm" | \
+        grep -iE "setup|install|^./VARA" | \
+        head -n 1 || true
+    )
   else
-    # For FM: look for files that contain "FM"
-    exe_file=$(find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null | \
-               grep -i "fm" | \
-               grep -i "vara" | \
-               grep -iE "setup|install" | \
-               head -n 1 || true)
+    # For FM: look for files that contain "FM" and "VARA"
+    exe_file=$(
+      find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null | \
+        grep -i "vara" | \
+        grep -i "fm" | \
+        grep -iE "setup|install" | \
+        head -n 1 || true
+    )
   fi
-  
+
   if [[ -z "${exe_file}" ]]; then
     echo "[!] No .exe installer found after extracting ${zip_filename}"
-    echo "    Files extracted:"
-    find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null || true
+    echo "    .exe files currently in directory:"
+    find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null || true
     return 1
   fi
-  
-  # Get the full path
-  local exe_path="${SCRIPT_DIR}/$(basename "${exe_file}")"
-  
-  echo "    Extracted installer: $(basename "${exe_file}")"
-  
-  # Return the full path to the exe
+
+  exe_file="$(basename "${exe_file}")"
+  echo "    Extracted installer: ${exe_file}"
+
+  # 6. Return the full path in the CURRENT directory (not SCRIPT_DIR)
+  local exe_path
+  exe_path="$(realpath "${exe_file}")"
+  echo "    Returning installer path: ${exe_path}"
+
+  # Output the path so caller can capture it
   echo "${exe_path}"
   return 0
 }
