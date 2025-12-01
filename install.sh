@@ -156,8 +156,8 @@ install_directory_structure() {
   mkdir -p "${NOZZLE_DIR}"
   
   # Create subdirectories
-  mkdir -p "${NOZZLE_DIR}/bin"
   mkdir -p "${NOZZLE_DIR}/wine-tools"
+  mkdir -p "${NOZZLE_DIR}/wine-tools/bin"
   mkdir -p "${NOZZLE_DIR}/radio-tools/xiegu-g90"
   mkdir -p "${NOZZLE_DIR}/radio-tools/yaesu-ft710"
   mkdir -p "${NOZZLE_DIR}/linux-tools"
@@ -233,20 +233,20 @@ install_nozzle_menu() {
     print_info "Attempting to install with sudo..."
     
     # Try with sudo
-    if sudo cp "${NOZZLE_DIR}/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+    if sudo cp "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
        sudo chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
       print_success "Installed nozzle-menu with sudo"
     else
       print_error "Failed to install nozzle-menu"
       print_info "You can install it manually later with:"
-      echo "  sudo cp ${NOZZLE_DIR}/bin/nozzle-menu /opt/emcomm-tools/bin/"
+      echo "  sudo cp ${NOZZLE_DIR}/wine-tools/bin/nozzle-menu /opt/emcomm-tools/bin/"
       echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
       return 1
     fi
   else
     # Can write without sudo
     print_info "Copying nozzle-menu to ${ETC_BIN_DIR}..."
-    if cp "${NOZZLE_DIR}/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+    if cp "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
        chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
       print_success "Installed nozzle-menu"
     else
@@ -280,8 +280,6 @@ show_next_steps() {
   echo
   echo -e "${GREEN}Directory Structure:${NC}"
   echo "  NozzleMods/"
-  echo "  ├── bin/"
-  echo "  │   └── nozzle-menu"
   echo "  ├── wine-tools/"
   echo "  │   ├── wine-setup.sh"
   echo "  │   └── fix-varac-13.sh"
