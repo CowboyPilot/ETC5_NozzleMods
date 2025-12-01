@@ -1,7 +1,7 @@
 #!/bin/bash
 # wine-setup.sh
 #
-# Version: 1.2.1
+# Version: 1.3.0
 #
 # Installs into a dedicated 32-bit Wine prefix:
 #   - Winlink Express
@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-VERSION="1.2.1"
+VERSION="1.3.0"
 
 PREFIX="${HOME}/.wine32"
 WINLINK_ZIP_URL="https://downloads.winlink.org/User%20Programs/Winlink_Express_install_1-7-28-0.zip"
@@ -34,6 +34,11 @@ VARA_KEY_FILE="${HOME}/vara_key"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
+
+# VARA download settings
+VARA_BASE_URL="https://downloads.winlink.org"
+VARA_INDEX_URL="${VARA_BASE_URL}/VARA%20Products/"
+VARA_HTML_FILE="${SCRIPT_DIR}/vara-index.html"
 
 echo
 echo "============================================================="
@@ -59,6 +64,162 @@ if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
   echo "ERROR: Must run from a graphical desktop session."
   exit 1
 fi
+
+# -------------------------------------------------------------
+#   VARA Download Functions (integrated download logic)
+# -------------------------------------------------------------
+
+cleanup_vara_html() {
+  [[ -f "${VARA_HTML_FILE}" ]] && rm -f "${VARA_HTML_FILE}"
+}
+
+trap cleanup_vara_html EXIT
+
+# Download VARA installer using integrated download logic
+download_vara_installer() {
+  local pattern="$1"  # Pattern to match (e.g., "VARA%20HF" or "VARA%20FM")
+  local mode="$2"     # "HF" or "FM" for display purposes
+  
+  echo "[*] Attempting to download latest VARA ${mode} installer..."
+  
+  # 1. Fetch main VARA download page as HTML
+  echo "    Fetching VARA product index..."
+  if ! curl -s -f -L -o "${VARA_HTML_FILE}" "${VARA_INDEX_URL}"; then
+    echo "[!] Error fetching VARA index page: ${VARA_INDEX_URL}"
+    return 1
+  fi
+  
+  # 2. Extract links matching the pattern (using grep and basic parsing)
+  local vara_file_path=""
+  
+  # Extract all href attributes and filter for our pattern
+  vara_file_path=$(grep -o 'href="[^"]*'"${pattern}"'[^"]*"' "${VARA_HTML_FILE}" | \
+                   sed 's/href="//g' | sed 's/"//g' | \
+                   grep -i '\.zip$' | head -n 1)
+  
+  if [[ -z "${vara_file_path}" ]]; then
+    echo "[!] Error: Could not find VARA ${mode} file matching pattern: ${pattern}"
+    return 1
+  fi
+  
+  # 3. Construct full URL and download
+  local full_url="${VARA_BASE_URL}${vara_file_path}"
+  local zip_filename=$(basename "${vara_file_path}")
+  
+  echo "    Found: ${vara_file_path}"
+  echo "    Downloading: ${full_url}"
+  
+  if ! curl -s -f -L -o "${zip_filename}" "${full_url}"; then
+    echo "[!] Failed to download VARA ${mode} installer"
+    return 1
+  fi
+  
+  echo "    Downloaded: ${zip_filename}"
+  
+  # 4. Extract the ZIP file
+  echo "    Extracting ${zip_filename}..."
+  if ! unzip -o "${zip_filename}" >/dev/null 2>&1; then
+    echo "[!] Failed to extract ${zip_filename}"
+    return 1
+  fi
+  
+  # 5. Find the extracted .exe (more specific matching)
+  local exe_file=""
+  if [[ "${mode}" == "HF" ]]; then
+    # For HF: look for setup files with "VARA" but NOT "FM" or "VarAC"
+    exe_file=$(find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null | \
+               grep -i "vara" | \
+               grep -iv "varac" | \
+               grep -iv "fm" | \
+               grep -iE "setup|install|^./VARA" | \
+               head -n 1 || true)
+  else
+    # For FM: look for files that contain "FM"
+    exe_file=$(find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null | \
+               grep -i "fm" | \
+               grep -i "vara" | \
+               grep -iE "setup|install" | \
+               head -n 1 || true)
+  fi
+  
+  if [[ -z "${exe_file}" ]]; then
+    echo "[!] No .exe installer found after extracting ${zip_filename}"
+    echo "    Files extracted:"
+    find . -maxdepth 1 -type f -name "*.exe" -newer "${zip_filename}" 2>/dev/null || true
+    return 1
+  fi
+  
+  # Get the full path
+  local exe_path="${SCRIPT_DIR}/$(basename "${exe_file}")"
+  
+  echo "    Extracted installer: $(basename "${exe_file}")"
+  
+  # Return the full path to the exe
+  echo "${exe_path}"
+  return 0
+}
+
+# -------------------------------------------------------------
+#   Early Download: VARA HF and VARA FM
+# -------------------------------------------------------------
+
+echo
+echo "============================================================="
+echo "   Step 1: Checking for VARA Installers"
+echo "============================================================="
+echo
+
+# Check for existing VARA HF installer
+VARA_HF_INSTALLER=""
+for f in "${SCRIPT_DIR}"/VARA*setup*.exe "${SCRIPT_DIR}"/VARA*.exe; do
+  if [[ -f "$f" ]] && [[ ! "$f" =~ [Ff][Mm] ]] && [[ ! "$f" =~ [Vv]ar[Aa][Cc] ]]; then
+    VARA_HF_INSTALLER="$f"
+    echo "[*] Found existing VARA HF installer: $(basename "${VARA_HF_INSTALLER}")"
+    break
+  fi
+done
+
+# If not found, download it
+if [[ -z "${VARA_HF_INSTALLER}" ]]; then
+  echo "[*] VARA HF installer not found locally. Downloading..."
+  if VARA_HF_INSTALLER=$(download_vara_installer "VARA%20HF" "HF"); then
+    echo "[✓] VARA HF installer ready: $(basename "${VARA_HF_INSTALLER}")"
+  else
+    echo "[!] Failed to download VARA HF installer"
+    echo "    You can manually download from: https://rosmodem.wordpress.com/"
+    echo "    Place VARA HF setup file in: ${SCRIPT_DIR}"
+    VARA_HF_INSTALLER=""
+  fi
+fi
+
+echo
+
+# Check for existing VARA FM installer
+VARA_FM_INSTALLER=""
+for f in "${SCRIPT_DIR}"/VARA*FM*.exe "${SCRIPT_DIR}"/VaraFM*.exe; do
+  if [[ -f "$f" ]]; then
+    VARA_FM_INSTALLER="$f"
+    echo "[*] Found existing VARA FM installer: $(basename "${VARA_FM_INSTALLER}")"
+    break
+  fi
+done
+
+# If not found, download it
+if [[ -z "${VARA_FM_INSTALLER}" ]]; then
+  echo "[*] VARA FM installer not found locally. Downloading..."
+  if VARA_FM_INSTALLER=$(download_vara_installer "VARA%20FM" "FM"); then
+    echo "[✓] VARA FM installer ready: $(basename "${VARA_FM_INSTALLER}")"
+  else
+    echo "[!] Failed to download VARA FM installer"
+    echo "    You can manually download from: https://rosmodem.wordpress.com/"
+    echo "    Place VARA FM setup file in: ${SCRIPT_DIR}"
+    VARA_FM_INSTALLER=""
+  fi
+fi
+
+echo
+echo "[*] VARA installer check complete"
+echo
 
 # -------------------------------------------------------------
 #   Read user configuration from user.json
@@ -196,7 +357,7 @@ if [[ "${CURRENT_WA}" != "win32" ]]; then
   echo "  1) Log out of your desktop session (or SSH session) completely."
   echo "  2) Log back in, so the new WINEARCH=win32 takes effect."
   echo "  3) Re-run this installer:"
-  echo "       ${SCRIPT_DIR}/10-install-all.sh"
+  echo "       ${SCRIPT_DIR}/wine-setup.sh"
   echo
   echo "After your next login, 'echo \$WINEARCH' should output: win32"
   echo "Only then will this script continue with installation."
@@ -233,109 +394,8 @@ find_varac_installer() {
   local dirs=("${SCRIPT_DIR}" "${HOME}/Downloads")
   for dir in "${dirs[@]}"; do
     local files
-    files=$(ls -1 "${dir}/VarAC_Installer"*.exe 2>/dev/null | sort -r || true)
-    if [[ -n "${files}" ]]; then
-      echo "${files}" | head -n 1
-      return 0
-    fi
-  done
-  return 1
-}
-
-# Download VARA installer using external vara-downloader.sh script
-download_vara_installer() {
-  local pattern="$1"  # Pattern to match (e.g., "VARA%20HF" or "VARA%20FM")
-  local mode="$2"     # "HF" or "FM" for display purposes
-  
-  echo "[*] Attempting to download latest VARA ${mode} installer..." >&2
-  
-  # Check if vara-downloader.sh exists
-  if [[ ! -f "${SCRIPT_DIR}/vara-downloader.sh" ]]; then
-    echo "[!] vara-downloader.sh not found in ${SCRIPT_DIR}" >&2
-    echo "    Download it from: https://github.com/thetechprepper/emcomm-tools-os-community/blob/main/overlay/etc/skel/add-ons/wine/vara-downloader.sh" >&2
-    return 1
-  fi
-  
-  # Make it executable
-  chmod +x "${SCRIPT_DIR}/vara-downloader.sh"
-  
-  # Save current directory and switch to script directory
-  local original_dir=$(pwd)
-  cd "${SCRIPT_DIR}"
-  
-  # Call vara-downloader.sh
-  if ! ./vara-downloader.sh "${pattern}"; then
-    echo "[!] Failed to download VARA ${mode} installer" >&2
-    cd "${original_dir}"
-    return 1
-  fi
-  
-  # Find the downloaded ZIP file - look for most recent .zip file
-  local zip_file=""
-  zip_file=$(ls -1t *.zip 2>/dev/null | head -n 1 || true)
-  
-  if [[ -z "${zip_file}" ]]; then
-    echo "[!] Downloaded ZIP file not found" >&2
-    cd "${original_dir}"
-    return 1
-  fi
-  
-  echo "    Extracting ${zip_file}..." >&2
-  if ! unzip -o "${zip_file}" >/dev/null 2>&1; then
-    echo "[!] Failed to extract ${zip_file}" >&2
-    cd "${original_dir}"
-    return 1
-  fi
-  
-  # Find the extracted .exe - for HF look for VARA.exe-like names, for FM look for VaraFM/VARAFM
-  local exe_file=""
-  if [[ "${mode}" == "HF" ]]; then
-    exe_file=$(find . -maxdepth 1 -name "*.exe" -newer "${zip_file}" | grep -iv "fm" | head -n 1 || true)
-  else
-    exe_file=$(find . -maxdepth 1 -name "*.exe" -newer "${zip_file}" | grep -i "fm" | head -n 1 || true)
-  fi
-  
-  if [[ -z "${exe_file}" ]]; then
-    echo "[!] No .exe installer found after extracting ${zip_file}" >&2
-    cd "${original_dir}"
-    return 1
-  fi
-  
-  # Get the full path
-  local exe_path="${SCRIPT_DIR}/$(basename "${exe_file}")"
-  
-  echo "    Extracted: $(basename "${exe_file}")" >&2
-  
-  # Return to original directory
-  cd "${original_dir}"
-  
-  # Return the full path to the exe (only this goes to stdout)
-  echo "${exe_path}"
-  return 0
-}
-
-# VARA HF installer: prefer names containing "VARA" but NOT "FM"
-find_vara_hf_installer() {
-  local dirs=("${SCRIPT_DIR}" "${HOME}/Downloads")
-  for dir in "${dirs[@]}"; do
-    local files
-    # Look for both setup.exe and any VARA*.exe that doesn't have FM in the name
-    files=$(find "${dir}" -maxdepth 1 \( -iname "VARA*setup*.exe" -o -iname "VARA*.exe" \) ! -iname "*FM*" 2>/dev/null | sort -r || true)
-    if [[ -n "${files}" ]]; then
-      echo "${files}" | head -n 1
-      return 0
-    fi
-  done
-  return 1
-}
-
-# VARA FM installer: names with "FM"
-find_vara_fm_installer() {
-  local dirs=("${SCRIPT_DIR}" "${HOME}/Downloads")
-  for dir in "${dirs[@]}"; do
-    local files
-    # Look for any VARA*FM*.exe or VaraFM*.exe
-    files=$(find "${dir}" -maxdepth 1 \( -iname "VARA*FM*.exe" -o -iname "VaraFM*.exe" \) 2>/dev/null | sort -r || true)
+    # Look specifically for VarAC installer (not VARA)
+    files=$(ls -1 "${dir}"/VarAC_Installer*.exe 2>/dev/null | sort -r || true)
     if [[ -n "${files}" ]]; then
       echo "${files}" | head -n 1
       return 0
@@ -684,34 +744,7 @@ if [[ -n "${VARA_HF_EXE}" ]]; then
   echo "[*] VARA HF already installed at:"
   echo "    ${VARA_HF_EXE}"
 else
-  VARA_HF_INSTALLER=""
-  
-  # First try to find locally (including just-downloaded files)
-  if VARA_HF_INSTALLER=$(find_vara_hf_installer); then
-    echo "[*] Found VARA HF installer:"
-    echo "    ${VARA_HF_INSTALLER}"
-  else
-    # Try to download if not found
-    echo "[!] VARA HF installer not found locally."
-    echo "[*] Attempting to download latest version from Winlink..."
-    # Pattern: "VARA%20HF" matches "VARA HF v4.8.9 setup.zip"
-    if VARA_HF_INSTALLER=$(download_vara_installer "VARA%20HF" "HF"); then
-      echo "[*] Successfully downloaded VARA HF installer to:"
-      echo "    ${VARA_HF_INSTALLER}"
-    else
-      echo "[!] Could not download VARA HF installer automatically."
-      echo "    Please manually download the VARA HF installer from:"
-      echo "      https://rosmodem.wordpress.com/"
-      echo "    Save it in:"
-      echo "      - ${SCRIPT_DIR}"
-      echo "      - or ${HOME}/Downloads"
-      echo "    Then re-run this script."
-      VARA_HF_INSTALLER=""
-    fi
-  fi
-  
-  # Install if we have an installer
-  if [[ -n "${VARA_HF_INSTALLER}" ]]; then
+  if [[ -n "${VARA_HF_INSTALLER}" && -f "${VARA_HF_INSTALLER}" ]]; then
     echo "[*] Running VARA HF installer: ${VARA_HF_INSTALLER}"
     env -u WINEARCH WINEPREFIX="${PREFIX}" wine "${VARA_HF_INSTALLER}"
     VARA_HF_EXE=$(find "${PREFIX}/drive_c" -maxdepth 6 -iname "VARA.exe" | head -n 1 || true)
@@ -726,7 +759,8 @@ else
       echo "WARNING: VARA HF installer ran but VARA.exe not found."
     fi
   else
-    echo "[!] Skipping VARA HF installation - no installer available"
+    echo "[!] VARA HF installer not available"
+    echo "    Download manually from: https://rosmodem.wordpress.com/"
   fi
 fi
 
@@ -735,34 +769,7 @@ if [[ -n "${VARA_FM_EXE}" ]]; then
   echo "[*] VARA FM already installed at:"
   echo "    ${VARA_FM_EXE}"
 else
-  VARA_FM_INSTALLER=""
-  
-  # First try to find locally (including just-downloaded files)
-  if VARA_FM_INSTALLER=$(find_vara_fm_installer); then
-    echo "[*] Found VARA FM installer:"
-    echo "    ${VARA_FM_INSTALLER}"
-  else
-    # Try to download if not found
-    echo "[!] VARA FM installer not found locally."
-    echo "[*] Attempting to download latest version from Winlink..."
-    # Pattern: "VARA%20FM" matches "VARA FM v4.3.9 setup.zip"
-    if VARA_FM_INSTALLER=$(download_vara_installer "VARA%20FM" "FM"); then
-      echo "[*] Successfully downloaded VARA FM installer to:"
-      echo "    ${VARA_FM_INSTALLER}"
-    else
-      echo "[!] Could not download VARA FM installer automatically."
-      echo "    Please manually download the VARA FM installer from:"
-      echo "      https://rosmodem.wordpress.com/"
-      echo "    Save it in:"
-      echo "      - ${SCRIPT_DIR}"
-      echo "      - or ${HOME}/Downloads"
-      echo "    Then re-run this script."
-      VARA_FM_INSTALLER=""
-    fi
-  fi
-  
-  # Install if we have an installer
-  if [[ -n "${VARA_FM_INSTALLER}" ]]; then
+  if [[ -n "${VARA_FM_INSTALLER}" && -f "${VARA_FM_INSTALLER}" ]]; then
     echo "[*] Running VARA FM installer: ${VARA_FM_INSTALLER}"
     env -u WINEARCH WINEPREFIX="${PREFIX}" wine "${VARA_FM_INSTALLER}"
     VARA_FM_EXE=$(find "${PREFIX}/drive_c" -maxdepth 6 -iname "VaraFM.exe" | head -n 1 || true)
@@ -777,7 +784,8 @@ else
       echo "WARNING: VARA FM installer ran but VaraFM.exe not found."
     fi
   else
-    echo "[!] Skipping VARA FM installation - no installer available"
+    echo "[!] VARA FM installer not available"
+    echo "    Download manually from: https://rosmodem.wordpress.com/"
   fi
 fi
 
@@ -954,15 +962,15 @@ echo "VARA HF/FM Executables:"
 echo
 echo "IMPORTANT - NEXT STEPS:"
 echo "  1) DO NOT launch programs directly from the menu yet!"
-echo "  2) Run 'etc-vara' to properly configure and launch your programs"
-echo "  3) etc-vara will:"
+echo "  2) Run 'nozzle-menu' to properly configure and launch your programs"
+echo "  3) nozzle-menu will:"
 echo "     - Allocate free ports automatically"
 echo "     - Configure Winlink, VarAC, and VARA with correct settings"
 echo "     - Launch programs in the correct order"
 echo
 echo "NOTES:"
 echo "  - Initial .ini files created with your callsign and COM10 port"
-echo "  - etc-vara will update ports and audio settings on each run"
+echo "  - nozzle-menu will update ports and audio settings on each run"
 echo "  - All programs share the 32-bit Wine prefix: ~/.wine32"
 echo "  - pdh.dll has been installed to avoid missing DLL errors"
 echo
