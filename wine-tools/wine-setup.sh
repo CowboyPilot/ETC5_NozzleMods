@@ -77,33 +77,33 @@ trap cleanup_vara_html EXIT
 
 # Download VARA installer using integrated download logic
 download_vara_installer() {
-  local pattern="$1"  # Pattern to match (e.g., "VARA%20HF" or "VARA%20FM")
+  local pattern="$1"  # e.g. "VARA%20HF%20v" or "VARA%20FM%20v"
   local mode="$2"     # "HF" or "FM" for display purposes
 
-  echo "[*] Attempting to download latest VARA ${mode} installer..."
-  echo "    Working directory: $(pwd)"
+  echo "[*] Attempting to download latest VARA ${mode} installer..." >&2
+  echo "    Working directory: $(pwd)" >&2
 
   # 1. Fetch main VARA download page as HTML
-  echo "    Fetching VARA product index..."
+  echo "    Fetching VARA product index: ${VARA_INDEX_URL}" >&2
   if ! curl -s -f -L -o "${VARA_HTML_FILE}" "${VARA_INDEX_URL}"; then
-    echo "[!] Error fetching VARA index page: ${VARA_INDEX_URL}"
+    echo "[!] Error fetching VARA index page: ${VARA_INDEX_URL}" >&2
     return 1
   fi
 
-  # 2. Extract links matching the pattern (using grep and basic parsing)
+  # 2. Extract links matching the pattern (case-insensitive)
   local vara_file_path=""
 
-  # Extract all href attributes and filter for our pattern and .zip
   vara_file_path=$(
-    grep -o 'href="[^"]*'"${pattern}"'[^"]*"' "${VARA_HTML_FILE}" | \
-      sed 's/^href="//; s/"$//' | \
+    grep -oi 'href="[^"]*'"${pattern}"'[^"]*"' "${VARA_HTML_FILE}" 2>/dev/null | \
+      sed -E 's/^[Hh][Rr][Ee][Ff]="//; s/"$//' | \
       grep -i '\.zip$' | \
-      head -n 1
+      head -n 1 || true
   )
 
   if [[ -z "${vara_file_path}" ]]; then
-    echo "[!] Error: Could not find VARA ${mode} file matching pattern: ${pattern}"
-    echo "    Try checking VARA_INDEX_URL or pattern."
+    echo "[!] Error: Could not find VARA ${mode} file matching pattern: ${pattern}" >&2
+    echo "    First few hrefs from index (debug):" >&2
+    grep -oi 'href="[^"]*"' "${VARA_HTML_FILE}" 2>/dev/null | head -n 10 >&2 || true
     return 1
   fi
 
@@ -112,35 +112,33 @@ download_vara_installer() {
   if [[ "${vara_file_path}" =~ ^https?:// ]]; then
     full_url="${vara_file_path}"
   else
-    # Ensure exactly one slash between base and path
-    full_url="${VARA_BASE_URL%/}/${vara_file_path#./}"
+    full_url="${VARA_BASE_URL%/}/${vara_file_path#/}"
   fi
 
   local zip_filename
   zip_filename="$(basename "${vara_file_path}")"
 
-  echo "    Found path: ${vara_file_path}"
-  echo "    Downloading: ${full_url}"
-  echo "    Saving as: ${zip_filename}"
+  echo "    Found path: ${vara_file_path}" >&2
+  echo "    Downloading: ${full_url}" >&2
+  echo "    Saving as: ${zip_filename}" >&2
 
   if ! curl -s -f -L -o "${zip_filename}" "${full_url}"; then
-    echo "[!] Failed to download VARA ${mode} installer"
+    echo "[!] Failed to download VARA ${mode} installer" >&2
     return 1
   fi
 
-  echo "    Downloaded: ${zip_filename}"
+  echo "    Downloaded: ${zip_filename}" >&2
 
   # 4. Extract the ZIP file into current directory
-  echo "    Extracting ${zip_filename}..."
+  echo "    Extracting ${zip_filename}..." >&2
   if ! unzip -o "${zip_filename}" >/dev/null 2>&1; then
-    echo "[!] Failed to extract ${zip_filename}"
+    echo "[!] Failed to extract ${zip_filename}" >&2
     return 1
   fi
 
-  # 5. Find the extracted .exe (more specific matching, NO -newer filter)
+  # 5. Find the extracted .exe (after download & extract)
   local exe_file=""
   if [[ "${mode}" == "HF" ]]; then
-    # For HF: look for setup files with "VARA" but NOT "FM" or "VarAC"
     exe_file=$(
       find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null | \
         grep -i "vara" | \
@@ -150,7 +148,6 @@ download_vara_installer() {
         head -n 1 || true
     )
   else
-    # For FM: look for files that contain "FM" and "VARA"
     exe_file=$(
       find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null | \
         grep -i "vara" | \
@@ -161,24 +158,24 @@ download_vara_installer() {
   fi
 
   if [[ -z "${exe_file}" ]]; then
-    echo "[!] No .exe installer found after extracting ${zip_filename}"
-    echo "    .exe files currently in directory:"
-    find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null || true
+    echo "[!] No .exe installer found after extracting ${zip_filename}" >&2
+    echo "    .exe files currently in directory:" >&2
+    find . -maxdepth 1 -type f -name "*.exe" 2>/dev/null >&2 || true
     return 1
   fi
 
   exe_file="$(basename "${exe_file}")"
-  echo "    Extracted installer: ${exe_file}"
-
-  # 6. Return the full path in the CURRENT directory (not SCRIPT_DIR)
   local exe_path
   exe_path="$(realpath "${exe_file}")"
-  echo "    Returning installer path: ${exe_path}"
 
-  # Output the path so caller can capture it
+  echo "    Extracted installer: ${exe_file}" >&2
+  echo "    Returning installer path: ${exe_path}" >&2
+
+  # *** IMPORTANT: stdout is ONLY the path ***
   echo "${exe_path}"
   return 0
 }
+
 
 # -------------------------------------------------------------
 #   Early Download: VARA HF and VARA FM
@@ -203,7 +200,7 @@ done
 # If not found, download it
 if [[ -z "${VARA_HF_INSTALLER}" ]]; then
   echo "[*] VARA HF installer not found locally. Downloading..."
-  if VARA_HF_INSTALLER=$(download_vara_installer "VARA%20HF" "HF"); then
+  if VARA_HF_INSTALLER=$(download_vara_installer "VARA%20HF%20v" "HF"); then
     echo "[✓] VARA HF installer ready: $(basename "${VARA_HF_INSTALLER}")"
   else
     echo "[!] Failed to download VARA HF installer"
@@ -228,7 +225,7 @@ done
 # If not found, download it
 if [[ -z "${VARA_FM_INSTALLER}" ]]; then
   echo "[*] VARA FM installer not found locally. Downloading..."
-  if VARA_FM_INSTALLER=$(download_vara_installer "VARA%20FM" "FM"); then
+  if VARA_FM_INSTALLER=$(download_vara_installer "VARA%20FM%20v" "FM"); then
     echo "[✓] VARA FM installer ready: $(basename "${VARA_FM_INSTALLER}")"
   else
     echo "[!] Failed to download VARA FM installer"
