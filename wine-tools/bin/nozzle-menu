@@ -560,7 +560,7 @@ launch_vara_installer() {
       echo -e "${RED}ERROR: Installer not found at ${NOZZLE_DIR}/wine-tools/wine-setup.sh${NC}"
       echo
       echo "Please run the NozzleMods installer first:"
-      echo "  curl -fsSL YOUR_REPO_URL/install.sh | bash"
+      echo "  curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh | bash"
       echo
       read -r -p "Press Enter to return to menu..."
     fi
@@ -649,8 +649,123 @@ fix_varac_v13() {
 }
 
 ################################################################################
-# Menu
+# Update Function
 ################################################################################
+
+update_nozzle_tools() {
+  clear
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}           Update NozzleMods Tools${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+  echo "This will download and run the latest installer from GitHub."
+  echo "All tools will be updated to the latest versions."
+  echo
+  read -r -p "Continue with update? (y/N): " update_choice
+  
+  if [[ "${update_choice}" =~ ^[Yy]$ ]]; then
+    echo
+    echo "Downloading latest installer..."
+    
+    local temp_installer="/tmp/nozzle-install-update.sh"
+    
+    if curl -fsSL "https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh" -o "${temp_installer}"; then
+      chmod +x "${temp_installer}"
+      echo
+      echo "Running installer..."
+      echo
+      bash "${temp_installer}"
+      rm -f "${temp_installer}"
+      echo
+      echo -e "${GREEN}Update complete!${NC}"
+      echo
+      read -r -p "Press Enter to exit (restart nozzle-menu to use updated version)..."
+      exit 0
+    else
+      echo -e "${RED}Failed to download installer${NC}"
+      echo
+      read -r -p "Press Enter to return to menu..."
+    fi
+  fi
+}
+
+################################################################################
+# Menu Functions
+################################################################################
+
+show_radio_menu() {
+  while true; do
+    clear
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           Radio Configuration Menu${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+    echo ""
+    echo "  1) Configure Xiegu G90 DigiRig PTT"
+    echo "  2) Install Yaesu FT-710 Support"
+    echo ""
+    echo "  B) Back to Main Menu"
+    echo ""
+    echo -n "Enter choice: "
+    
+    read -r CHOICE
+    CHOICE=$(echo "$CHOICE" | tr '[:lower:]' '[:upper:]')
+    
+    case "${CHOICE}" in
+      1)
+        configure_xiegu_g90
+        ;;
+      2)
+        install_yaesu_ft710
+        ;;
+      B)
+        return
+        ;;
+      *)
+        echo -e "${RED}Invalid choice${NC}"
+        sleep 2
+        ;;
+    esac
+  done
+}
+
+show_system_menu() {
+  while true; do
+    clear
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           System Tools Menu${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+    echo ""
+    echo "  1) Fix APT Repository Sources"
+    echo "  2) Fix VarAC V13 .NET Issues"
+    echo "  3) Update NozzleMods Tools"
+    echo ""
+    echo "  B) Back to Main Menu"
+    echo ""
+    echo -n "Enter choice: "
+    
+    read -r CHOICE
+    CHOICE=$(echo "$CHOICE" | tr '[:lower:]' '[:upper:]')
+    
+    case "${CHOICE}" in
+      1)
+        fix_apt_sources
+        ;;
+      2)
+        fix_varac_v13
+        ;;
+      3)
+        update_nozzle_tools
+        ;;
+      B)
+        return
+        ;;
+      *)
+        echo -e "${RED}Invalid choice${NC}"
+        sleep 2
+        ;;
+    esac
+  done
+}
 
 show_menu() {
   clear
@@ -663,43 +778,42 @@ show_menu() {
   if ! check_vara_installed; then
     echo -e "${YELLOW}⚠ VARA Tools not installed${NC}"
     echo ""
-    echo "  ${BLUE}0)${NC} Install VARA Tools (Winlink, VarAC, VARA HF/FM)"
+    echo "  ${BLUE}1)${NC} Install VARA Tools (Winlink, VarAC, VARA HF/FM)"
     echo ""
     echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo "  R) Radio Configuration"
+    echo "  S) System Tools"
+    echo ""
+    echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  Q) Quit"
+    echo ""
+    echo -n "Enter choice: "
+  else
+    echo "VARA Applications:"
+    echo ""
+    echo "  1) VarAC + VARA HF"
+    echo "  2) VarAC + VARA FM"
+    echo "  3) Winlink + VARA HF"
+    echo "  4) Winlink + VARA FM"
+    echo "  5) Winlink Other (ARDOP/Telnet - no VARA)"
+    echo "  6) Pat + VARA HF"
+    echo "  7) Pat + VARA FM"
+    echo "  8) VARA HF Modem Only"
+    echo "  9) VARA FM Modem Only"
+    echo ""
+    echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  R) Radio Configuration"
+    echo "  S) System Tools"
+    echo ""
+    echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
+    echo ""
+    echo "  Q) Quit"
+    echo ""
+    echo -n "Enter choice: "
   fi
-  
-  echo "VARA Applications:"
-  echo ""
-  echo "  1) VarAC + VARA HF"
-  echo "  2) VarAC + VARA FM"
-  echo "  3) Winlink + VARA HF"
-  echo "  4) Winlink + VARA FM"
-  echo "  5) Winlink Other (ARDOP/Telnet - no VARA)"
-  echo "  6) Pat + VARA HF"
-  echo "  7) Pat + VARA FM"
-  echo "  8) VARA HF Modem Only"
-  echo "  9) VARA FM Modem Only"
-  echo ""
-  echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
-  echo ""
-  echo "Radio Configuration:"
-  echo ""
-  echo "  R) Configure Xiegu G90 DigiRig PTT"
-  echo "  F) Install Yaesu FT-710 Support"
-  echo ""
-  echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
-  echo ""
-  echo "System Tools:"
-  echo ""
-  echo "  S) Fix APT Repository Sources"
-  echo "  V) Fix VarAC V13 .NET Issues"
-  echo ""
-  echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
-  echo ""
-  echo "  Q) Quit"
-  echo ""
-  echo -n "Enter choice: "
 }
 
 ################################################################################
@@ -715,58 +829,48 @@ main() {
     CHOICE=$(echo "$CHOICE" | tr '[:lower:]' '[:upper:]')
 
     case "${CHOICE}" in
-      0)
+      1)
         if ! check_vara_installed; then
+          # Install VARA tools
           launch_vara_installer
         else
-          echo "VARA Tools already installed."
+          # VarAC + VARA HF
+          global_cleanup
+          
+          echo
+          echo -e "${BLUE}Selected: VarAC + VARA HF${NC}"
+          
+          PORT=$(find_free_port) || {
+            echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
+            sleep 3
+            continue
+          }
+          echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
+          
+          echo
+          echo "Updating INI files..."
+          patch_vara_ini_port "HF" "${PORT}"
+          patch_varac_ini "HF" "${PORT}"
+          
+          echo
+          # Start VarAC first, then VARA to avoid crashes
+          start_varac
           sleep 2
+          start_vara_hf
+          
+          echo
+          echo -e "${GREEN}================================================================${NC}"
+          echo -e "${GREEN}  Launch complete - VarAC + VARA HF${NC}"
+          echo -e "${GREEN}================================================================${NC}"
+          echo
+          read -r -p "Press Enter to return to menu..."
         fi
-        ;;
-      
-      1)
-        # VarAC + VARA HF
-        if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
-          sleep 3
-          continue
-        fi
-        
-        global_cleanup
-        
-        echo
-        echo -e "${BLUE}Selected: VarAC + VARA HF${NC}"
-        
-        PORT=$(find_free_port) || {
-          echo -e "${RED}ERROR: No free port found in 8300-8350${NC}"
-          sleep 3
-          continue
-        }
-        echo -e "${GREEN}Using TCP port: ${PORT}${NC}"
-        
-        echo
-        echo "Updating INI files..."
-        patch_vara_ini_port "HF" "${PORT}"
-        patch_varac_ini "HF" "${PORT}"
-        
-        echo
-        # Start VarAC first, then VARA to avoid crashes
-        start_varac
-        sleep 2
-        start_vara_hf
-        
-        echo
-        echo -e "${GREEN}================================================================${NC}"
-        echo -e "${GREEN}  Launch complete - VarAC + VARA HF${NC}"
-        echo -e "${GREEN}================================================================${NC}"
-        echo
-        read -r -p "Press Enter to return to menu..."
         ;;
 
       2)
         # VarAC + VARA FM
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -805,7 +909,7 @@ main() {
       3)
         # Winlink + VARA HF
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -842,7 +946,7 @@ main() {
       4)
         # Winlink + VARA FM
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -887,7 +991,7 @@ main() {
       5)
         # Winlink Other (no VARA)
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -912,7 +1016,7 @@ main() {
       6)
         # Pat + VARA HF
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -949,7 +1053,7 @@ main() {
       7)
         # Pat + VARA FM
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -986,7 +1090,7 @@ main() {
       8)
         # VARA HF Modem Only
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -1023,7 +1127,7 @@ main() {
       9)
         # VARA FM Modem Only
         if ! check_vara_installed; then
-          echo -e "${RED}VARA Tools not installed. Please choose option 0 first.${NC}"
+          echo -e "${RED}VARA Tools not installed. Please choose option 1 first.${NC}"
           sleep 3
           continue
         fi
@@ -1058,23 +1162,13 @@ main() {
         ;;
 
       R)
-        # Configure Xiegu G90
-        configure_xiegu_g90
-        ;;
-
-      F)
-        # Install Yaesu FT-710
-        install_yaesu_ft710
+        # Radio Configuration submenu
+        show_radio_menu
         ;;
 
       S)
-        # Fix APT sources
-        fix_apt_sources
-        ;;
-
-      V)
-        # Fix VarAC V13
-        fix_varac_v13
+        # System Tools submenu
+        show_system_menu
         ;;
 
       Q)
