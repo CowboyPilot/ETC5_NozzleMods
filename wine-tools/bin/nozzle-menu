@@ -777,7 +777,7 @@ show_menu() {
   if ! check_vara_installed; then
     echo -e "${YELLOW}⚠ VARA Tools not installed${NC}"
     echo ""
-    echo "  ${BLUE}1)${NC} Install VARA Tools (Winlink, VarAC, VARA HF/FM)"
+    echo -e "  ${BLUE}1)${NC} Install VARA Tools (Winlink, VarAC, VARA HF/FM)"
     echo ""
     echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
     echo ""
