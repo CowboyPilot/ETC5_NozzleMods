@@ -215,15 +215,15 @@ install_nozzle_menu() {
   print_header "Installing Nozzle Menu"
   
   # Download to bin directory first
-  download_file "${REPO_URL}/bin/nozzle-menu" \
-    "${NOZZLE_DIR}/bin/nozzle-menu"
+  download_file "${REPO_URL}/wine-tools/bin/nozzle-menu" \
+    "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu"
   
   # Check if we can write to /opt/emcomm-tools/bin
   if [ ! -d "${ETC_BIN_DIR}" ]; then
     print_warning "Directory ${ETC_BIN_DIR} does not exist"
     print_info "This is normal if EmComm Tools is not fully set up"
     print_info "You can install nozzle-menu manually later with:"
-    echo "  sudo cp ${NOZZLE_DIR}/bin/nozzle-menu /opt/emcomm-tools/bin/"
+    echo "  sudo cp ${NOZZLE_DIR}/wine-tools/bin/nozzle-menu /opt/emcomm-tools/bin/"
     echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
     return 0
   fi
