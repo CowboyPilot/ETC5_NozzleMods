@@ -5,12 +5,12 @@ A comprehensive collection of scripts and tools to enhance EmComm Tools R5 with 
 ## Quick Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh | bash
 ```
 
 Or download and run:
 ```bash
-wget https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh
+wget https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh
 chmod +x install.sh
 ./install.sh
 ```

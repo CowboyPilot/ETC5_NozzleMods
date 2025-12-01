@@ -9,10 +9,10 @@
 #   - linux-tools/ → ~/NozzleMods/linux-tools/
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/install.sh | bash
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main/install.sh
+#   wget https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods
 #   chmod +x install.sh
 #   ./install.sh
 ################################################################################
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 # GitHub repository - UPDATE THIS TO YOUR REPO
-REPO_URL="https://raw.githubusercontent.com/YOUR_USERNAME/NozzleMods/main"
+REPO_URL="https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main"
 
 # Colors for output
 RED='\033[1;31m'
