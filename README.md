@@ -47,6 +47,8 @@ Before using NozzleMods, ensure you have:
 2. Run `et-user` to configure your callsign
 3. Run `et-audio` to configure audio
 4. Run `et-radio` to select your radio
+5. Ensure VarAC Installer is downloaded into ~/Downloads if you want to install it
+    (It must follow the naming convention "VarAC_Installer_V*.exe")
 
 ## Main Menu: nozzle-menu
 
@@ -54,6 +56,13 @@ After installation, access all features by running:
 ```bash
 nozzle-menu
 ```
+
+## First Run
+
+For the first run of Winlink and VarAC you will need to configure the settings with your
+callsign, grid square, etc.  Also make sure to go in to Vara HF and Vara FM in Winlink
+to disable autolaunch as well as in the Vara settings in VarAC (It will try to double launch
+VARA modem and mess up the port configurations).
 
 The menu provides:
 
