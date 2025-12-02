@@ -5,7 +5,7 @@
 #
 # Installs into a dedicated 32-bit Wine prefix:
 #   - Winlink Express
-#   - VarAC (VARA Chat)  (if VarAC_Installer*.exe is present)
+#   - VarAC (VARA Chat)  (if VarAC_Installer*.exe is present in ~/Downloads directory)
 #   - VARA HF (auto-downloads if not found)
 #   - VARA FM (auto-downloads if not found)
 #

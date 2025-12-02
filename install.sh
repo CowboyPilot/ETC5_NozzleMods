@@ -294,6 +294,8 @@ show_next_steps() {
   echo "  └── linux-tools/"
   echo "      └── fix-sources.sh"
   echo
+  echo "Place the VarAC installer in ~/Downloads then run nozzle-menu to install the VARA Apps and optional System/Radio options"
+  echo "If you have already installed VARA from the menu you can run ~/NozzleMods/wine-tools/wine-setup.sh to install VarAC"
   
   print_header "Quick Start"
   
