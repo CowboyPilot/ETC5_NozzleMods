@@ -52,3 +52,4 @@ echo "[✓] Done."
 echo "Run it with:"
 echo "  ~/.local/bin/chirp"
 ~/.local/bin/chirp
+echo "if this failed you need to update your sources first"
