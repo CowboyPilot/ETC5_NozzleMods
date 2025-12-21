@@ -55,9 +55,5 @@ echo "Running apt update..."
 apt update
 
 echo
-echo "Installing alsa-utils..."
-apt install -y alsa-utils
-
-echo
 echo "Done. If something fails, you can restore:"
 echo "  sudo cp ${BACKUP} /etc/apt/sources.list"
