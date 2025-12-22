@@ -11,6 +11,10 @@ SUBSYSTEM=="sound", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7388", \
     ACTION=="add", \
     ENV{ET_DEVICE}="AIOC", \
     ATTR{id}="ET_AUDIO", \
-    ENV{ET_SUBDEVICE}="AUDIO", GROUP="audio", MODE="0660", SYMLINK+="et-audio"
+    ENV{ET_SUBDEVICE}="AUDIO", \
+    ENV{PULSE_IGNORE}="1", \
+    ENV{ACP_IGNORE}="1", \
+    ENV{PIPEWIRE_IGNORE}="1", \
+    TAG+="uaccess", TAG-="seat", \
+    GROUP="audio", MODE="0660", SYMLINK+="et-audio", \
     RUN+="/usr/bin/systemctl start rigctld"
-
