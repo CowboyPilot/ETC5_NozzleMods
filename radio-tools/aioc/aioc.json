@@ -4,8 +4,7 @@
   "model": "AIOC",
   "rigctrl": {
     "id": "1",
-    "ptt": "CM108",
-    "pttOnly": "true"
+    "ptt": "NONE"
   },
   "notes": [
     "Set your VFO manually",
