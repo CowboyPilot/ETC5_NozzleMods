@@ -664,6 +664,25 @@ install_aioc() {
   fi
 }
 
+install_chirp() {
+  clear
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}           Chirp Installation${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+  
+  if [[ -d "${NOZZLE_DIR}/linux-tools/" ]]; then
+    cd "${NOZZLE_DIR}/linux-tools"
+    sudo bash install_chirp.sh
+    echo
+    read -r -p "Press Enter to return to menu..."
+  else
+    echo -e "${RED}ERROR: Chirp Installer not found at ${NOZZLE_DIR}/linux-tools/${NC}"
+    echo
+    read -r -p "Press Enter to return to menu..."
+  fi
+}
+
 ################################################################################
 # System Fix Functions
 ################################################################################
@@ -841,7 +860,8 @@ show_system_menu() {
     echo ""
     echo "  1) Fix APT Repository Sources"
     echo "  2) Fix VarAC V13 .NET Issues"
-    echo "  3) Update NozzleMods Tools"
+    echo "  3) Install Chirp"
+    echo "  4) Update NozzleMods Tools"
     echo ""
     echo "  B) Back to Main Menu"
     echo ""
@@ -858,6 +878,9 @@ show_system_menu() {
         fix_varac_v13
         ;;
       3)
+        install_chirp
+        ;;
+      4)
         update_nozzle_tools
         ;;
       B)
