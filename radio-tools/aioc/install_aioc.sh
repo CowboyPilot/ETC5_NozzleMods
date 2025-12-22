@@ -23,6 +23,7 @@ UDEV_RULES_DIR="/etc/udev/rules.d"
 DIREWOLF_CONF_DIR="${ET_HOME}/conf/template.d/packet"
 BACKUP_DIR="${HOME}/.aioc-backup"
 SBIN_DIR="${ET_HOME}/sbin"
+BIN_DIR="${ET_HOME}/bin"
 
 # Backup file
 BACKUP_FILE="${BACKUP_DIR}/udev-tester.sh.backup"
@@ -157,6 +158,17 @@ sudo cp "${SCRIPT_DIR}/aioc.json" "${RADIOS_DIR}/"
 sudo chown root:et-data "${RADIOS_DIR}/aioc.json"
 sudo chmod 644 "${RADIOS_DIR}/aioc.json"
 echo -e "${GREEN}✓ Radio configuration installed${NC}"
+
+# Install aioc-direwolf launcher
+echo "Installing AIOC DireWolf Launcher..."
+if [ -f "${SCRIPT_DIR}/aioc-direwolf" ]; then
+    sudo cp "${SCRIPT_DIR}/aioc-direwolf" "${BIN_DIR}/"
+    sudo chown root:et-data "${BIN_DIR}/aioc-direwolf"
+    sudo chmod +x "${BIN_DIR}/aioc-direwolf"
+    echo -e "${GREEN} aioc-direwolf script installed${NC}"
+else
+    echo -e "${YELLOW} aioc-direwolf script not found, skipping${NC}"
+fi
 
 # Install udev rules
 echo "Installing udev rules..."
