@@ -2,11 +2,12 @@
 ################################################################################
 # nozzle-menu
 #
-# Main menu for NozzleMods - EmComm Tools R5 enhancements V1.1
+# Main menu for NozzleMods - EmComm Tools R5 enhancements V1.2
 #
 # Features:
 #   - VARA Tools launcher (Winlink, VarAC, Pat with VARA HF/FM)
-#   - Radio configuration (Xiegu G90, Yaesu FT-710)
+#   - AIOC DireWolf modes (Simple TNC, Packet, APRS)
+#   - Radio configuration (Xiegu G90, Yaesu FT-710, AIOC)
 #   - System fixes and maintenance
 #   - VARA installation wizard
 #
@@ -521,6 +522,43 @@ start_vara_fm() {
 }
 
 ################################################################################
+# AIOC DireWolf Functions
+################################################################################
+
+launch_aioc_mode() {
+  local mode="$1"
+  local mode_name="$2"
+  
+  clear
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}           AIOC DireWolf - ${mode_name}${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+  
+  # Check if aioc-direwolf command exists
+  if ! command -v aioc-direwolf &>/dev/null; then
+    echo -e "${RED}ERROR: aioc-direwolf command not found${NC}"
+    echo -e "${YELLOW}Please install AIOC support first from Radio Configuration menu${NC}"
+    echo
+    read -r -p "Press Enter to return to menu..."
+    return 1
+  fi
+  
+  echo -e "${BLUE}Starting AIOC DireWolf in ${mode_name} mode...${NC}"
+  echo
+  
+  # Launch aioc-direwolf
+  aioc-direwolf start "${mode}"
+  
+  echo
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}  AIOC DireWolf ${mode_name} Started${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+  read -r -p "Press Enter to return to menu..."
+}
+
+################################################################################
 # VARA Installation Check & Launcher
 ################################################################################
 
@@ -711,6 +749,50 @@ update_nozzle_tools() {
 # Menu Functions
 ################################################################################
 
+show_aioc_menu() {
+  while true; do
+    clear
+    echo -e "${GREEN}================================================================${NC}"
+    echo -e "${GREEN}           AIOC Options${NC}"
+    echo -e "${GREEN}================================================================${NC}"
+    echo ""
+    echo "  1) Simple TNC (APRS, ChatterVox, Packet, BBS, etc)"
+    echo "  2) Packet Digipeater"
+    echo "  3) APRS Digipeater"
+    echo ""
+    echo -e "${BLUE}After selecting an AIOC mode, open a new window with et-mode to${NC}"
+    echo -e "${BLUE}select your application. Use alsamixer to adjust input and${NC}"
+    echo -e "${BLUE}output volumes.${NC}"
+    echo -e "${RED}Leave the window open until you are done with Direwolf then Ctl-C to close${NC}"
+    echo ""
+    echo "  B) Back to Main Menu"
+    echo ""
+    echo -n "Enter choice: "
+    
+    read -r CHOICE
+    CHOICE=$(echo "$CHOICE" | tr '[:lower:]' '[:upper:]')
+    
+    case "${CHOICE}" in
+      1)
+        launch_aioc_mode "aioc-simple" "Simple TNC"
+        ;;
+      2)
+        launch_aioc_mode "aioc-packet" "Packet Digipeater"
+        ;;
+      3)
+        launch_aioc_mode "aioc-aprs" "APRS Digipeater"
+        ;;
+      B)
+        return
+        ;;
+      *)
+        echo -e "${RED}Invalid choice${NC}"
+        sleep 2
+        ;;
+    esac
+  done
+}
+
 show_radio_menu() {
   while true; do
     clear
@@ -804,6 +886,7 @@ show_menu() {
     echo ""
     echo -e "${YELLOW}═══════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo "  A) AIOC Options"
     echo "  R) Radio Configuration"
     echo "  S) System Tools"
     echo ""
@@ -827,6 +910,7 @@ show_menu() {
     echo ""
     echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo "  A) AIOC Options"
     echo "  R) Radio Configuration"
     echo "  S) System Tools"
     echo ""
@@ -1181,6 +1265,11 @@ main() {
         echo -e "${GREEN}================================================================${NC}"
         echo
         read -r -p "Press Enter to return to menu..."
+        ;;
+
+      A)
+        # AIOC Options submenu
+        show_aioc_menu
         ;;
 
       R)
