@@ -12,6 +12,5 @@ SUBSYSTEM=="sound", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7388", \
     ENV{ET_DEVICE}="AIOC", \
     ATTR{id}="ET_AUDIO", \
     ENV{ET_SUBDEVICE}="AUDIO", GROUP="audio", MODE="0660", SYMLINK+="et-audio"
-
-
+    RUN+="/usr/bin/systemctl start rigctld"
 
