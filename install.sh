@@ -2,25 +2,26 @@
 ################################################################################
 # NozzleMods Installer for EmComm Tools R5
 #
-# This script downloads and installs all NozzleMods tools:
+# This script clones the NozzleMods repository and installs all tools:
 #   - nozzle-menu → /opt/emcomm-tools/bin/
 #   - wine-tools/ → ~/NozzleMods/wine-tools/
 #   - radio-tools/ → ~/NozzleMods/radio-tools/
 #   - linux-tools/ → ~/NozzleMods/linux-tools/
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh | bash
 #
 # Or download and run:
-#   wget https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods
+#   wget https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main/install.sh
 #   chmod +x install.sh
 #   ./install.sh
 ################################################################################
 
 set -euo pipefail
 
-# GitHub repository - UPDATE THIS TO YOUR REPO
-REPO_URL="https://raw.githubusercontent.com/CowboyPilot/ETC5_NozzleMods/main"
+# GitHub repository
+REPO_URL="https://github.com/CowboyPilot/ETC5_NozzleMods.git"
+REPO_BRANCH="main"
 
 # Colors for output
 RED='\033[1;31m'
@@ -32,6 +33,7 @@ NC='\033[0m' # No Color
 # Installation paths
 NOZZLE_DIR="${HOME}/NozzleMods"
 ETC_BIN_DIR="/opt/emcomm-tools/bin"
+TEMP_CLONE_DIR="/tmp/NozzleMods_install_$$"
 
 ################################################################################
 # Helper Functions
@@ -69,6 +71,16 @@ check_command() {
   return 0
 }
 
+cleanup_temp() {
+  if [ -d "${TEMP_CLONE_DIR}" ]; then
+    print_info "Cleaning up temporary files..."
+    rm -rf "${TEMP_CLONE_DIR}"
+  fi
+}
+
+# Trap to ensure cleanup on exit
+trap cleanup_temp EXIT
+
 ################################################################################
 # Pre-flight Checks
 ################################################################################
@@ -79,7 +91,7 @@ preflight_checks() {
   local missing_deps=0
   
   # Check for required commands
-  for cmd in wget curl chmod; do
+  for cmd in git chmod; do
     if check_command "$cmd"; then
       print_success "$cmd found"
     else
@@ -92,7 +104,7 @@ preflight_checks() {
     echo
     echo "Please install missing packages and try again:"
     echo "  sudo apt update"
-    echo "  sudo apt install wget curl coreutils"
+    echo "  sudo apt install git coreutils"
     exit 1
   fi
   
@@ -107,7 +119,7 @@ preflight_checks() {
   
   # Verify we can access GitHub
   print_info "Checking GitHub connectivity..."
-  if curl -fsSL --connect-timeout 10 "${REPO_URL}/install.sh" > /dev/null 2>&1; then
+  if git ls-remote "${REPO_URL}" &>/dev/null; then
     print_success "GitHub accessible"
   else
     print_error "Cannot reach GitHub repository"
@@ -121,109 +133,90 @@ preflight_checks() {
 }
 
 ################################################################################
-# Download Functions
+# Installation Functions
 ################################################################################
 
-download_file() {
-  local url="$1"
-  local dest="$2"
+clone_repository() {
+  print_header "Cloning Repository"
   
-  print_info "Downloading $(basename "$dest")..."
-  if curl -fsSL "$url" -o "$dest"; then
-    print_success "Downloaded $(basename "$dest")"
-    
-    # Make executable if it's a .sh file
-    if [[ "$dest" == *.sh ]]; then
-      chmod +x "$dest"
-      print_info "Made executable: $(basename "$dest")"
-    fi
+  print_info "Cloning from ${REPO_URL}..."
+  print_info "Branch: ${REPO_BRANCH}"
+  
+  if git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${TEMP_CLONE_DIR}"; then
+    print_success "Repository cloned successfully"
     return 0
   else
-    print_error "Failed to download $(basename "$dest")"
+    print_error "Failed to clone repository"
     return 1
   fi
 }
 
-################################################################################
-# Installation Functions
-################################################################################
+backup_existing() {
+  if [ -d "${NOZZLE_DIR}" ]; then
+    print_header "Backing Up Existing Installation"
+    
+    local backup_dir="${NOZZLE_DIR}.backup.$(date +%Y%m%d_%H%M%S)"
+    print_info "Creating backup at ${backup_dir}..."
+    
+    if mv "${NOZZLE_DIR}" "${backup_dir}"; then
+      print_success "Existing installation backed up"
+      print_info "Old version saved to: ${backup_dir}"
+    else
+      print_warning "Could not backup existing installation"
+      print_info "Proceeding with installation anyway..."
+    fi
+  fi
+}
 
-install_directory_structure() {
-  print_header "Creating Directory Structure"
+install_files() {
+  print_header "Installing Files"
   
   # Create main directory
   print_info "Creating ${NOZZLE_DIR}..."
   mkdir -p "${NOZZLE_DIR}"
   
-  # Create subdirectories
-  mkdir -p "${NOZZLE_DIR}/wine-tools"
-  mkdir -p "${NOZZLE_DIR}/wine-tools/bin"
-  mkdir -p "${NOZZLE_DIR}/radio-tools/xiegu-g90"
-  mkdir -p "${NOZZLE_DIR}/radio-tools/yaesu-ft710"
-  mkdir -p "${NOZZLE_DIR}/linux-tools"
+  # Copy all directories from the cloned repo
+  print_info "Copying wine-tools..."
+  cp -r "${TEMP_CLONE_DIR}/wine-tools" "${NOZZLE_DIR}/"
   
-  print_success "Directory structure created"
-}
-
-install_wine_tools() {
-  print_header "Installing Wine Tools"
+  print_info "Copying radio-tools..."
+  cp -r "${TEMP_CLONE_DIR}/radio-tools" "${NOZZLE_DIR}/"
   
-  download_file "${REPO_URL}/wine-tools/wine-setup.sh" \
-    "${NOZZLE_DIR}/wine-tools/wine-setup.sh"
+  print_info "Copying linux-tools..."
+  cp -r "${TEMP_CLONE_DIR}/linux-tools" "${NOZZLE_DIR}/"
   
-  download_file "${REPO_URL}/wine-tools/fix-varac-13.sh" \
-    "${NOZZLE_DIR}/wine-tools/fix-varac-13.sh"
+  # Copy the installer itself for future use
+  if [ -f "${TEMP_CLONE_DIR}/install.sh" ]; then
+    print_info "Copying installer script..."
+    cp "${TEMP_CLONE_DIR}/install.sh" "${NOZZLE_DIR}/"
+    chmod +x "${NOZZLE_DIR}/install.sh"
+  fi
   
-  print_success "Wine tools installed"
-}
-
-install_radio_tools() {
-  print_header "Installing Radio Tools"
+  # Make all shell scripts executable
+  print_info "Making scripts executable..."
+  find "${NOZZLE_DIR}" -type f -name "*.sh" -exec chmod +x {} \;
   
-  # Xiegu G90
-  print_info "Installing Xiegu G90 tools..."
-  download_file "${REPO_URL}/radio-tools/xiegu-g90/update-g90-config.sh" \
-    "${NOZZLE_DIR}/radio-tools/xiegu-g90/update-g90-config.sh"
-  
-  # Yaesu FT-710
-  print_info "Installing Yaesu FT-710 tools..."
-  download_file "${REPO_URL}/radio-tools/yaesu-ft710/install_ft710.sh" \
-    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/install_ft710.sh"
-  
-  download_file "${REPO_URL}/radio-tools/yaesu-ft710/yaesu-ft710.json" \
-    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/yaesu-ft710.json"
-  
-  download_file "${REPO_URL}/radio-tools/yaesu-ft710/78-et-ft710.rules" \
-    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/78-et-ft710.rules"
-  
-  download_file "${REPO_URL}/radio-tools/yaesu-ft710/udev-tester.patch" \
-    "${NOZZLE_DIR}/radio-tools/yaesu-ft710/udev-tester.patch"
-  
-  print_success "Radio tools installed"
-}
-
-install_linux_tools() {
-  print_header "Installing Linux Tools"
-  
-  download_file "${REPO_URL}/linux-tools/fix-sources.sh" \
-    "${NOZZLE_DIR}/linux-tools/fix-sources.sh"
-  
-  print_success "Linux tools installed"
+  print_success "Files installed successfully"
 }
 
 install_nozzle_menu() {
   print_header "Installing Nozzle Menu"
   
-  # Download to bin directory first
-  download_file "${REPO_URL}/wine-tools/bin/nozzle-menu" \
-    "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu"
+  local nozzle_menu_src="${NOZZLE_DIR}/wine-tools/bin/nozzle-menu"
+  
+  # Check if source file exists
+  if [ ! -f "${nozzle_menu_src}" ]; then
+    print_error "nozzle-menu not found at ${nozzle_menu_src}"
+    print_info "You can install it manually later if the file becomes available"
+    return 1
+  fi
   
   # Check if we can write to /opt/emcomm-tools/bin
   if [ ! -d "${ETC_BIN_DIR}" ]; then
     print_warning "Directory ${ETC_BIN_DIR} does not exist"
     print_info "This is normal if EmComm Tools is not fully set up"
     print_info "You can install nozzle-menu manually later with:"
-    echo "  sudo cp ${NOZZLE_DIR}/wine-tools/bin/nozzle-menu /opt/emcomm-tools/bin/"
+    echo "  sudo cp ${nozzle_menu_src} /opt/emcomm-tools/bin/"
     echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
     return 0
   fi
@@ -233,20 +226,20 @@ install_nozzle_menu() {
     print_info "Attempting to install with sudo..."
     
     # Try with sudo
-    if sudo cp "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+    if sudo cp "${nozzle_menu_src}" "${ETC_BIN_DIR}/" 2>/dev/null && \
        sudo chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
       print_success "Installed nozzle-menu with sudo"
     else
       print_error "Failed to install nozzle-menu"
       print_info "You can install it manually later with:"
-      echo "  sudo cp ${NOZZLE_DIR}/wine-tools/bin/nozzle-menu /opt/emcomm-tools/bin/"
+      echo "  sudo cp ${nozzle_menu_src} /opt/emcomm-tools/bin/"
       echo "  sudo chmod +x /opt/emcomm-tools/bin/nozzle-menu"
       return 1
     fi
   else
     # Can write without sudo
     print_info "Copying nozzle-menu to ${ETC_BIN_DIR}..."
-    if cp "${NOZZLE_DIR}/wine-tools/bin/nozzle-menu" "${ETC_BIN_DIR}/" 2>/dev/null && \
+    if cp "${nozzle_menu_src}" "${ETC_BIN_DIR}/" 2>/dev/null && \
        chmod +x "${ETC_BIN_DIR}/nozzle-menu" 2>/dev/null; then
       print_success "Installed nozzle-menu"
     else
@@ -259,15 +252,6 @@ install_nozzle_menu() {
   print_success "nozzle-menu installed successfully"
 }
 
-install_self() {
-  print_header "Installing installer script"
-  
-  download_file "${REPO_URL}/install.sh" \
-    "${NOZZLE_DIR}/install.sh"
-  
-  print_success "Installer script saved to ${NOZZLE_DIR}/install.sh"
-}
-
 ################################################################################
 # Post-Installation Instructions
 ################################################################################
@@ -275,27 +259,14 @@ install_self() {
 show_next_steps() {
   print_header "Installation Complete!"
   
-  echo "All scripts have been installed to:"
+  echo "All tools have been installed to:"
   echo "  ${NOZZLE_DIR}"
   echo
-  echo -e "${GREEN}Directory Structure:${NC}"
-  echo "  NozzleMods/"
-  echo "  ├── wine-tools/"
-  echo "  │   ├── wine-setup.sh"
-  echo "  │   └── fix-varac-13.sh"
-  echo "  ├── radio-tools/"
-  echo "  │   ├── xiegu-g90/"
-  echo "  │   │   └── update-g90-config.sh"
-  echo "  │   └── yaesu-ft710/"
-  echo "  │       ├── install_ft710.sh"
-  echo "  │       ├── yaesu-ft710.json"
-  echo "  │       ├── 78-et-ft710.rules"
-  echo "  │       └── udev-tester.patch"
-  echo "  └── linux-tools/"
-  echo "      └── fix-sources.sh"
+  echo "Place the VarAC installer in ~/Downloads then run nozzle-menu to install"
+  echo "the VARA Apps and optional System/Radio options."
   echo
-  echo "Place the VarAC installer in ~/Downloads then run nozzle-menu to install the VARA Apps and optional System/Radio options"
-  echo "If you have already installed VARA from the menu you can run ~/NozzleMods/wine-tools/wine-setup.sh to install VarAC"
+  echo "If you have already installed VARA from the menu you can run"
+  echo "~/NozzleMods/wine-tools/wine-setup.sh to install VarAC"
   
   print_header "Quick Start"
   
@@ -311,6 +282,7 @@ show_next_steps() {
   echo -e "${YELLOW}Radio Configuration:${NC}"
   echo "  sudo ${NOZZLE_DIR}/radio-tools/xiegu-g90/update-g90-config.sh"
   echo "  sudo ${NOZZLE_DIR}/radio-tools/yaesu-ft710/install_ft710.sh"
+  echo "  sudo ${NOZZLE_DIR}/radio-tools/aioc/install_aioc.sh"
   echo
   echo -e "${YELLOW}Linux System Tools:${NC}"
   echo "  sudo ${NOZZLE_DIR}/linux-tools/fix-sources.sh"
@@ -343,37 +315,28 @@ main() {
   # Run pre-flight checks
   preflight_checks
   
-  # Install components
+  # Clone the repository
   echo
-  install_directory_structure
+  if ! clone_repository; then
+    print_error "Failed to clone repository. Exiting."
+    exit 1
+  fi
   
+  # Backup existing installation if present
   echo
-  install_wine_tools || {
-    print_error "Failed to install wine tools"
-    echo "Continuing with other installations..."
-  }
+  backup_existing
   
+  # Install files
   echo
-  install_radio_tools || {
-    print_error "Failed to install radio tools"
-    echo "Continuing with other installations..."
-  }
+  if ! install_files; then
+    print_error "Failed to install files. Exiting."
+    exit 1
+  fi
   
-  echo
-  install_linux_tools || {
-    print_error "Failed to install linux tools"
-    echo "Continuing with other installations..."
-  }
-  
+  # Install nozzle-menu
   echo
   install_nozzle_menu || {
-    print_error "Failed to install nozzle-menu"
-    echo "Continuing..."
-  }
-  
-  echo
-  install_self || {
-    print_error "Failed to save installer script"
+    print_warning "nozzle-menu installation failed, but other tools are installed"
     echo "Continuing..."
   }
   
