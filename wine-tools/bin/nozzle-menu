@@ -607,6 +607,25 @@ install_yaesu_ft710() {
   fi
 }
 
+install_aioc() {
+  clear
+  echo -e "${GREEN}================================================================${NC}"
+  echo -e "${GREEN}           AIOC Installation${NC}"
+  echo -e "${GREEN}================================================================${NC}"
+  echo
+  
+  if [[ -d "${NOZZLE_DIR}/radio-tools/aioc" ]]; then
+    cd "${NOZZLE_DIR}/radio-tools/aioc"
+    bash install_aioc.sh
+    echo
+    read -r -p "Press Enter to return to menu..."
+  else
+    echo -e "${RED}ERROR: AIOC tools not found at ${NOZZLE_DIR}/radio-tools/aioc/${NC}"
+    echo
+    read -r -p "Press Enter to return to menu..."
+  fi
+}
+
 ################################################################################
 # System Fix Functions
 ################################################################################
@@ -701,6 +720,7 @@ show_radio_menu() {
     echo ""
     echo "  1) Configure Xiegu G90 DigiRig PTT"
     echo "  2) Install Yaesu FT-710 Support"
+    echo "  3) Install AIOC Support"
     echo ""
     echo "  B) Back to Main Menu"
     echo ""
@@ -715,6 +735,9 @@ show_radio_menu() {
         ;;
       2)
         install_yaesu_ft710
+        ;;
+      3)
+        install_aioc
         ;;
       B)
         return

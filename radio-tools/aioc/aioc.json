@@ -1,0 +1,27 @@
+{
+  "id": "aioc",
+  "vendor": "AIOC",
+  "model": "AIOC",
+  "rigctrl": {
+    "id": "1",
+    "ptt": "CM108",
+    "pttOnly": "true"
+  },
+  "notes": [
+    "Set your VFO manually",
+    "Adjust your volume, RF gain and squelch manually",
+    "Rig Ctl will not start with this option, PTT",
+    "is via CM108",
+    "-------------------------------------------------",
+    "--For Simple APRS, BBS, Pat Winlink, Chattervox",
+    "---run et-direwolf start aioc-simple",
+    "-------------------------------------------------",
+    "--For Packet Digipeater",
+    "---run et-direwolf start aioc-packet",
+    "-------------------------------------------------",
+    "--For APRS Digipeater",
+    "---run et-direwolf start aioc-aprs",
+    "-------------------------------------------------",
+    "then use et-mode to select your user app."
+  ]
+}

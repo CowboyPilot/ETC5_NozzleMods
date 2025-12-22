@@ -1,0 +1,17 @@
+# Purpose  : AIOC 
+#
+# Preconditions:
+# 1. AIOC connected via USB cable
+#
+# Postconditions:
+# 1. /dev/et-audio created
+
+SUBSYSTEM=="sound", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="7388", \
+#    PROGRAM="/opt/emcomm-tools/sbin/udev-tester.sh aioc", \
+    ACTION=="add", \
+    ENV{ET_DEVICE}="AIOC", \
+    ATTR{id}="ET_AUDIO", \
+    ENV{ET_SUBDEVICE}="AUDIO", GROUP="audio", MODE="0660", SYMLINK+="et-audio"
+
+
+
