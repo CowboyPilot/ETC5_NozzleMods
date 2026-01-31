@@ -8,8 +8,6 @@
     "ptt": "RIG"
   },
   "notes": [
-    "031 CAT RATE = 38400bps",
-    "032 CAT TOT = 100ms",
     "FUNC - RADIO SETTING - MODE PSK/DATA",
     "  -USB OUT LEVEL 30",
     "  -USB MOD GAIN 70",

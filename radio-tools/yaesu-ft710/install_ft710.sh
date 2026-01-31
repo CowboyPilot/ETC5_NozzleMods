@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${RED}"
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║                    ⚠️  WARNING - USE AT YOUR OWN RISK ⚠️        ║"
+echo "║         WARNING - USE AT YOUR OWN RISK                         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo "This script will modify system files for Emcomm Tools R5 to add"
@@ -52,9 +52,9 @@ echo ""
 
 # Check for existing backup and offer restore
 if [ -f "${BACKUP_FILE_UDEV}" ] || [ -f "${BACKUP_FILE_AUDIO}" ]; then
-    echo -e "${YELLOW}╔════════════════════════════════════════════════════════════════╗"
+    echo -e "╔════════════════════════════════════════════════════════════════╗"
     echo "║           BACKUP FOUND - RESTORE OPTION AVAILABLE             ║"
-    echo "╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo "╚════════════════════════════════════════════════════════════════╝"
     echo ""
     echo "Backup files were found from a previous installation:"
     echo "  ${BACKUP_DIR}"
