@@ -1,7 +1,7 @@
 #!/bin/bash
 # Yaesu FT-710 Support Installer for Emcomm Tools R5
-# Author: WB1ONE
-# Date: Jan 31, 2026
+# Author: Generated for FT-710 support
+# Date: Jan 31, 2025
 #
 #   USE AT YOUR OWN RISK 
 # This script modifies system files and udev configuration.
@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo -e "${RED}"
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║                        WARNING - USE AT YOUR OWN RISK          ║"
+echo "║                    ⚠️  WARNING - USE AT YOUR OWN RISK ⚠️        ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 echo "This script will modify system files for Emcomm Tools R5 to add"
@@ -169,7 +169,7 @@ echo -e "${GREEN}✓ Backup saved to ${BACKUP_FILE_UDEV}${NC}"
 # Backup original et-audio
 echo "Backing up original et-audio..."
 sudo cp "${BIN_DIR}/et-audio" "${BACKUP_FILE_AUDIO}"
-sudo chown $USER:$USER "${BACKUP_FILE_AUDIO}"
+sudo chown $USER:$(id -gn) "${BACKUP_FILE_AUDIO}"
 echo -e "${GREEN}✓ Backup saved to ${BACKUP_FILE_AUDIO}${NC}"
 
 # Install radio configuration
@@ -257,26 +257,14 @@ echo "       ls -la /dev/et-cat /dev/et-audio"
 echo "  4. Run et-audio to configure audio settings:"
 echo "       et-audio update-config"
 echo ""
-echo "Radio configuration notes RADIO SETTING - MODE PSK/DATA Menu:"
-echo "      - USB OUT LEVEL = 70"
-echo "      - MOD SOURCE - USB"
-echo "      - USB MOD GAIN - 70"
-echo "      - RPTT SELECT - DAKY"
-echo "      - MOD SOURCE - USB"
-
-echo "Radio configuration notes OPERATION SETTING - GENERAL Menu:"
-echo "      - CAT-1 RATE - 38400"
-echo "      - CAT-1 CAT-3 STOP BIT - 1"
-echo "      - CAT-2 RATE - 4800"
-echo "      - CAT-3 RATE - 38400"
-
+echo "Radio configuration notes:"
+echo "  • Set CAT RATE to 38400bps (menu 031)"
+echo "  • Set CAT TOT to 100ms (menu 032)"
+echo "  • Set DATA MODE to OTHERS (menu 062)"
+echo "  • FUNC → RADIO SETTING → MODE PSK/DATA:"
+echo "      - USB OUT LEVEL = 30"
+echo "      - USB MOD GAIN = 70"
 echo "  • Select operating mode: DATA-U"
-echo "  • Select the following: ATT - OFF; IPO-IPO; DNF-OFF; AGC-SLOW"
-echo "  • Set RF GAIN/SQL knob full right"
-echo "  • Leave SHIFT; WIDTH; NOTCH; COUNTOUR all off."
-echo "  • Exception - WIDTH can be adjusted for narrow bandwidth modes like VARA 500 to increase SNR"
-
-
 echo ""
 echo "Audio settings (applied by et-audio):"
 echo "  • Speaker (TX): 60% unmuted"
