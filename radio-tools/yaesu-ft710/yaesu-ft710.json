@@ -13,7 +13,26 @@
     "FUNC - RADIO SETTING - MODE PSK/DATA",
     "  -USB OUT LEVEL 30",
     "  -USB MOD GAIN 70",
-    "Select Mode DATA-U"
+    "Select Mode DATA-U",
+    "------------------",
+    "Radio configuration notes RADIO SETTING - MODE PSK/DATA Menu:",
+    " - USB OUT LEVEL = 70",
+    " - MOD SOURCE - USB",
+    " - USB MOD GAIN - 70",
+    " - RPTT SELECT - DAKY",
+    " - MOD SOURCE - USB",
+    "------------------",
+    "Radio configuration notes OPERATION SETTING - GENERAL Menu:",
+    " - CAT-1 RATE - 38400",
+    " - CAT-1 CAT-3 STOP BIT - 1",
+    " - CAT-2 RATE - 4800",
+    " - CAT-3 RATE - 38400",
+    "------------------",
+    "  • Select operating mode: DATA-U",
+    "  • Select the following: ATT - OFF; IPO-IPO; DNF-OFF; AGC-SLOW",
+    "  • Set RF GAIN/SQL knob full right",
+    "  • Leave SHIFT; WIDTH; NOTCH; COUNTOUR all off.",
+    "  • Exception - WIDTH can be adjusted for narrow bandwidth modes like VARA 500 to increase SNR"
   ],
   "fieldNotes": [
   ]
